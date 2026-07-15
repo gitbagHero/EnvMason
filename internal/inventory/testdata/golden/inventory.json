@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "generated_at": "2026-07-15T00:00:00Z",
+  "system": {
+    "os": "macos",
+    "os_version": "15.5",
+    "architecture": "arm64",
+    "process_architecture": "arm64",
+    "sources": [
+      {
+        "kind": "fixture",
+        "name": "deterministic golden fixture",
+        "collected_at": "2026-07-15T00:00:00Z",
+        "confidence": "high"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "id": "runtime.node",
+      "display_name": "Node.js",
+      "category": "runtime",
+      "installations": [
+        {
+          "id": "node-homebrew-24",
+          "version": "v24.4.0",
+          "normalized_version": "24.4.0",
+          "path": "/opt/homebrew/bin/node",
+          "architecture": "arm64",
+          "manager": "homebrew",
+          "active_state": "active",
+          "default_state": "default",
+          "install_reason": "direct",
+          "sources": [
+            {
+              "kind": "fixture",
+              "name": "deterministic golden fixture",
+              "collected_at": "2026-07-15T00:00:00Z",
+              "confidence": "high"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "findings": []
+}

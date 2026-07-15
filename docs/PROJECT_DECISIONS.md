@@ -76,6 +76,16 @@
 - 决定：成功和帮助返回 0，未知命令或非法参数返回 2，内部失败保留返回 1。帮助写 stdout，使用错误写 stderr。
 - 决定：版本输出包含版本、提交、构建时间、Go 版本和目标平台。机器可读格式、completion 和配置读取不属于 I01。
 
+### D-011：I02 统一清单 Schema 契约
+
+- 状态：Accepted
+- 决定：统一清单采用 JSON Schema Draft 2020-12，初始 `schema_version` 为 `0.1.0`，Schema `$id` 为 `urn:envmason:schema:inventory:0.1.0`。
+- 决定：对象默认使用 `additionalProperties: false`，未知字段、缺失必填字段、非法枚举和未知 Schema 版本必须被拒绝。
+- 决定：激活状态、默认状态和安装原因使用包含 `unknown` 的显式枚举，不用无法表达不确定性的简单布尔值。
+- 决定：公开 Schema 手工维护，不从 Go 结构体自动生成；Go 结构体、Schema、fixture 和 golden snapshot 通过契约测试保持一致。
+- 决定：使用 `github.com/santhosh-tekuri/jsonschema/v6` v6.0.2 在本地嵌入并校验 Draft 2020-12 Schema，不在运行时联网获取 Schema。
+- 决定：I02 不增加 CLI 命令，不扫描系统，不执行外部命令，不进行版本比较或生成建议。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -126,3 +136,17 @@
   - [远程 CI #2](https://github.com/gitbagHero/EnvMason/actions/runs/29393737936) 通过：Ubuntu、macOS、Windows × Go 1.25/1.26 共六个任务全部成功。
 - N/A：I01 不包含配置、扫描、网络、系统修改、fixture、Schema 或发布版本。
 - 结论：I01 已完成并被接受。I02 已具备顺序依赖条件，但尚未开始。
+
+## I02 验收记录
+
+- 增量：I02 统一清单 Schema 与 fixture 框架
+- 开始日期：2026-07-15
+- 客观检查状态：本地通过（2026-07-15）；远程 CI 待分支推送后验证
+- 维护者最终验收：Accepted（2026-07-15）
+- 验收项：合法 fixture 和公开示例通过 Draft 2020-12 Schema 校验；缺失必填字段、非法枚举、未知字段、非法时间和未知 Schema 版本均被拒绝。
+- 验收项：相同对象重复序列化结果一致并通过 golden snapshot；公开示例成功表达同一 Tool 的两个 Installation。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./cmd/envmason` 均通过。
+- 离线检查：`GOPROXY=off go test -count=1 ./internal/inventory ./schemas/inventory` 通过，运行时 Schema 校验无需网络。
+- 手动验收：维护者确认 I02 手动检测通过（2026-07-15）。
+- N/A：I02 不包含 CLI 新命令、真实系统探测、网络查询、版本比较、建议、配置或系统修改。
+- 结论：I02 已完成并被接受；待提交到 `main` 且远程 CI 通过后，I03 具备顺序依赖条件。

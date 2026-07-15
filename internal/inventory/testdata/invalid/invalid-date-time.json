@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "generated_at": "not-a-date",
+  "system": {
+    "os": "unknown",
+    "os_version": "unknown",
+    "architecture": "unknown",
+    "process_architecture": "unknown",
+    "sources": [
+      {
+        "kind": "fixture",
+        "name": "invalid date-time fixture",
+        "collected_at": "2026-07-15T00:00:00Z",
+        "confidence": "high"
+      }
+    ]
+  },
+  "tools": [],
+  "findings": []
+}

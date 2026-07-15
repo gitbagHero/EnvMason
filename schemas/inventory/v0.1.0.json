@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:envmason:schema:inventory:0.1.0",
+  "title": "EnvMason Inventory",
+  "description": "Normalized, source-backed inventory of a developer workstation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "system",
+    "tools",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "system": {
+      "$ref": "#/$defs/system"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "$defs": {
+    "architecture": {
+      "type": "string",
+      "enum": [
+        "amd64",
+        "arm64",
+        "386",
+        "arm",
+        "ppc64",
+        "ppc64le",
+        "s390x",
+        "riscv64",
+        "unknown"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "unknown"]
+    },
+    "source_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "collected_at", "confidence"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "command",
+            "file",
+            "package_manager",
+            "environment",
+            "manual",
+            "fixture",
+            "unknown"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collected_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        }
+      }
+    },
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "os_version",
+        "architecture",
+        "process_architecture",
+        "sources"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "enum": ["macos", "windows", "linux", "unknown"]
+        },
+        "os_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "$ref": "#/$defs/architecture"
+        },
+        "process_architecture": {
+          "$ref": "#/$defs/architecture"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/source_metadata"
+          }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "display_name", "category", "installations"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)+$"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "base",
+            "runtime",
+            "ecosystem",
+            "container",
+            "sdk",
+            "devops",
+            "agent",
+            "unknown"
+          ]
+        },
+        "installations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/installation"
+          }
+        }
+      }
+    },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "path",
+        "architecture",
+        "manager",
+        "active_state",
+        "default_state",
+        "install_reason",
+        "sources"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "$ref": "#/$defs/architecture"
+        },
+        "manager": {
+          "type": "string",
+          "minLength": 1
+        },
+        "active_state": {
+          "type": "string",
+          "enum": ["active", "inactive", "unknown"]
+        },
+        "default_state": {
+          "type": "string",
+          "enum": ["default", "non_default", "unknown"]
+        },
+        "install_reason": {
+          "type": "string",
+          "enum": ["direct", "dependency", "unknown"]
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/source_metadata"
+          }
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "severity",
+        "message",
+        "evidence",
+        "confidence",
+        "sources"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "error"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        },
+        "tool_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/source_metadata"
+          }
+        }
+      }
+    }
+  }
+}

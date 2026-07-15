@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "generated_at": "2026-07-15T00:00:00Z",
+  "system": {
+    "os": "darwin",
+    "os_version": "15.5",
+    "architecture": "arm64",
+    "process_architecture": "arm64",
+    "sources": [
+      {
+        "kind": "fixture",
+        "name": "invalid enum fixture",
+        "collected_at": "2026-07-15T00:00:00Z",
+        "confidence": "high"
+      }
+    ]
+  },
+  "tools": [],
+  "findings": []
+}

@@ -1,0 +1,87 @@
+{
+  "schema_version": "0.1.0",
+  "generated_at": "2026-07-15T00:00:00Z",
+  "system": {
+    "os": "macos",
+    "os_version": "15.5",
+    "architecture": "arm64",
+    "process_architecture": "arm64",
+    "sources": [
+      {
+        "kind": "fixture",
+        "name": "I02 public example",
+        "collected_at": "2026-07-15T00:00:00Z",
+        "confidence": "high"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "id": "runtime.node",
+      "display_name": "Node.js",
+      "category": "runtime",
+      "installations": [
+        {
+          "id": "node-nvm-22",
+          "version": "v22.17.0",
+          "normalized_version": "22.17.0",
+          "path": "/Users/example/.nvm/versions/node/v22.17.0/bin/node",
+          "architecture": "arm64",
+          "manager": "nvm",
+          "active_state": "inactive",
+          "default_state": "non_default",
+          "install_reason": "direct",
+          "sources": [
+            {
+              "kind": "fixture",
+              "name": "I02 public example",
+              "collected_at": "2026-07-15T00:00:00Z",
+              "confidence": "high"
+            }
+          ]
+        },
+        {
+          "id": "node-homebrew-24",
+          "version": "v24.4.0",
+          "normalized_version": "24.4.0",
+          "path": "/opt/homebrew/bin/node",
+          "architecture": "arm64",
+          "manager": "homebrew",
+          "active_state": "active",
+          "default_state": "default",
+          "install_reason": "direct",
+          "sources": [
+            {
+              "kind": "fixture",
+              "name": "I02 public example",
+              "collected_at": "2026-07-15T00:00:00Z",
+              "confidence": "high"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "finding-node-multiple",
+      "code": "MULTIPLE_INSTALLATIONS",
+      "severity": "warning",
+      "message": "Node.js has multiple known installations.",
+      "evidence": [
+        "node-nvm-22",
+        "node-homebrew-24"
+      ],
+      "confidence": "high",
+      "tool_id": "runtime.node",
+      "sources": [
+        {
+          "kind": "fixture",
+          "name": "I02 public example",
+          "collected_at": "2026-07-15T00:00:00Z",
+          "confidence": "high"
+        }
+      ]
+    }
+  ]
+}
