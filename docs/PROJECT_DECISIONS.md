@@ -112,8 +112,8 @@
 - 增量：I01 可运行的空 CLI
 - 开始日期：2026-07-15
 - 检查日期：2026-07-15
-- 客观检查状态：Local Passed；Remote CI Pending
-- 维护者最终验收：Pending
+- 客观检查状态：Passed
+- 维护者最终验收：Accepted（2026-07-15）
 - 自动化检查结果：
   - Go 1.25.6 和本机 Go 1.26.2 单元测试通过。
   - `go vet ./...`、gofmt 和 race 检测通过。
@@ -122,5 +122,7 @@
   - 版本、提交、构建时间、Go 版本和目标平台注入验证通过。
   - 未知命令、未知参数和保留的 `-v` 均返回退出码 2，错误写入 stderr。
   - Cobra 默认 completion 和 `-v` 版本简写均未暴露。
-  - GitHub Actions 工作流 YAML 语法检查通过；完整三平台 CI 结果需在推送后由远程运行验证。
+  - GitHub Actions 工作流 YAML 语法检查通过。
+  - [远程 CI #2](https://github.com/gitbagHero/EnvMason/actions/runs/29393737936) 通过：Ubuntu、macOS、Windows × Go 1.25/1.26 共六个任务全部成功。
 - N/A：I01 不包含配置、扫描、网络、系统修改、fixture、Schema 或发布版本。
+- 结论：I01 已完成并被接受。I02 已具备顺序依赖条件，但尚未开始。
