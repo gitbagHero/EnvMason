@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Editors
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Build and test outputs
+/bin/
+/dist/
+/coverage/
+*.test
+*.out
+
+# Local environment files
+.env
+.env.*
+!.env.example
