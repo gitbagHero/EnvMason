@@ -141,12 +141,13 @@
 
 - 增量：I02 统一清单 Schema 与 fixture 框架
 - 开始日期：2026-07-15
-- 客观检查状态：本地通过（2026-07-15）；远程 CI 待分支推送后验证
+- 客观检查状态：本地与远程 CI 均通过（2026-07-15）
 - 维护者最终验收：Accepted（2026-07-15）
 - 验收项：合法 fixture 和公开示例通过 Draft 2020-12 Schema 校验；缺失必填字段、非法枚举、未知字段、非法时间和未知 Schema 版本均被拒绝。
 - 验收项：相同对象重复序列化结果一致并通过 golden snapshot；公开示例成功表达同一 Tool 的两个 Installation。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./cmd/envmason` 均通过。
 - 离线检查：`GOPROXY=off go test -count=1 ./internal/inventory ./schemas/inventory` 通过，运行时 Schema 校验无需网络。
+- 远程检查：[GitHub Actions CI #4](https://github.com/gitbagHero/EnvMason/actions/runs/29397547420) 通过。
 - 手动验收：维护者确认 I02 手动检测通过（2026-07-15）。
 - N/A：I02 不包含 CLI 新命令、真实系统探测、网络查询、版本比较、建议、配置或系统修改。
-- 结论：I02 已完成并被接受；待提交到 `main` 且远程 CI 通过后，I03 具备顺序依赖条件。
+- 结论：I02 已完成并被接受，已经提交到 `main` 且远程 CI 通过；I03 已具备顺序依赖条件，但尚未开始。
