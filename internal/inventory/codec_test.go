@@ -13,6 +13,7 @@ func TestValidateJSONAcceptsFixturesAndPublicExample(t *testing.T) {
 
 	paths := []string{
 		filepath.Join("testdata", "valid", "minimal.json"),
+		filepath.Join("testdata", "valid", "system-v0.2.json"),
 		filepath.Join("..", "..", "examples", "inventory-report.json"),
 	}
 	for _, path := range paths {
@@ -136,9 +137,20 @@ func fixtureInventory() Inventory {
 		System: System{
 			OS:                  OSMacOS,
 			OSVersion:           "15.5",
+			OSBuild:             "24F74",
 			Architecture:        ArchitectureARM64,
 			ProcessArchitecture: ArchitectureARM64,
-			Sources:             []SourceMetadata{source},
+			TranslationState:    TranslationStateNative,
+			Shell: Shell{
+				LoginPath:    "/bin/zsh",
+				LoginName:    "zsh",
+				InvokingPath: "/bin/zsh",
+				InvokingName: "zsh",
+			},
+			PathEntries: []PathEntry{
+				{Position: 0, Value: "/opt/homebrew/bin", State: PathStateExists, Duplicate: false},
+			},
+			Sources: []SourceMetadata{source},
 		},
 		Tools: []Tool{
 			{

@@ -2,7 +2,10 @@ package inventory
 
 import "time"
 
-const SchemaVersion = "0.1.0"
+const (
+	SchemaVersion       = "0.2.0"
+	LegacySchemaVersion = "0.1.0"
+)
 
 type Architecture string
 
@@ -93,6 +96,22 @@ const (
 	SeverityError   FindingSeverity = "error"
 )
 
+type TranslationState string
+
+const (
+	TranslationStateNative     TranslationState = "native"
+	TranslationStateTranslated TranslationState = "translated"
+	TranslationStateUnknown    TranslationState = "unknown"
+)
+
+type PathState string
+
+const (
+	PathStateExists  PathState = "exists"
+	PathStateMissing PathState = "missing"
+	PathStateUnknown PathState = "unknown"
+)
+
 type Inventory struct {
 	SchemaVersion string    `json:"schema_version"`
 	GeneratedAt   time.Time `json:"generated_at"`
@@ -104,9 +123,27 @@ type Inventory struct {
 type System struct {
 	OS                  OperatingSystem  `json:"os"`
 	OSVersion           string           `json:"os_version"`
+	OSBuild             string           `json:"os_build"`
 	Architecture        Architecture     `json:"architecture"`
 	ProcessArchitecture Architecture     `json:"process_architecture"`
+	TranslationState    TranslationState `json:"translation_state"`
+	Shell               Shell            `json:"shell"`
+	PathEntries         []PathEntry      `json:"path_entries"`
 	Sources             []SourceMetadata `json:"sources"`
+}
+
+type Shell struct {
+	LoginPath    string `json:"login_path"`
+	LoginName    string `json:"login_name"`
+	InvokingPath string `json:"invoking_path"`
+	InvokingName string `json:"invoking_name"`
+}
+
+type PathEntry struct {
+	Position  int       `json:"position"`
+	Value     string    `json:"value"`
+	State     PathState `json:"state"`
+	Duplicate bool      `json:"duplicate"`
 }
 
 type Tool struct {

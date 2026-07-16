@@ -1,11 +1,33 @@
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "generated_at": "2026-07-15T00:00:00Z",
   "system": {
     "os": "macos",
     "os_version": "15.5",
+    "os_build": "24F74",
     "architecture": "arm64",
     "process_architecture": "arm64",
+    "translation_state": "native",
+    "shell": {
+      "login_path": "/bin/zsh",
+      "login_name": "zsh",
+      "invoking_path": "/bin/zsh",
+      "invoking_name": "zsh"
+    },
+    "path_entries": [
+      {
+        "position": 0,
+        "value": "/opt/homebrew/bin",
+        "state": "exists",
+        "duplicate": false
+      },
+      {
+        "position": 1,
+        "value": "/usr/bin",
+        "state": "exists",
+        "duplicate": false
+      }
+    ],
     "sources": [
       {
         "kind": "fixture",

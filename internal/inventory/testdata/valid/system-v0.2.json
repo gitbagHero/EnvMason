@@ -1,0 +1,29 @@
+{
+  "schema_version": "0.2.0",
+  "generated_at": "2026-07-15T00:00:00Z",
+  "system": {
+    "os": "macos",
+    "os_version": "15.7.4",
+    "os_build": "24G517",
+    "architecture": "arm64",
+    "process_architecture": "arm64",
+    "translation_state": "native",
+    "shell": {
+      "login_path": "/bin/zsh",
+      "login_name": "zsh",
+      "invoking_path": "/bin/zsh",
+      "invoking_name": "zsh"
+    },
+    "path_entries": [],
+    "sources": [
+      {
+        "kind": "fixture",
+        "name": "I03 valid system fixture",
+        "collected_at": "2026-07-15T00:00:00Z",
+        "confidence": "high"
+      }
+    ]
+  },
+  "tools": [],
+  "findings": []
+}

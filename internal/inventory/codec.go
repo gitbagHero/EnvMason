@@ -12,7 +12,10 @@ import (
 	inventoryschema "github.com/gitbagHero/EnvMason/schemas/inventory"
 )
 
-var compiledSchema = sync.OnceValues(compileSchema)
+var compiledSchemas = struct {
+	sync.Mutex
+	values map[string]*jsonschema.Schema
+}{values: make(map[string]*jsonschema.Schema)}
 
 // Marshal validates inventory against the public schema and emits stable,
 // indented JSON with a trailing newline.
@@ -51,7 +54,17 @@ func Decode(data []byte) (Inventory, error) {
 // ValidateJSON validates one JSON document against the embedded inventory
 // schema. It never resolves schema resources over the network.
 func ValidateJSON(data []byte) error {
-	schema, err := compiledSchema()
+	var envelope struct {
+		SchemaVersion string `json:"schema_version"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return fmt.Errorf("parse inventory JSON: %w", err)
+	}
+	if envelope.SchemaVersion == "" {
+		return fmt.Errorf("validate inventory JSON: missing schema_version")
+	}
+
+	schema, err := schemaForVersion(envelope.SchemaVersion)
 	if err != nil {
 		return fmt.Errorf("compile inventory schema: %w", err)
 	}
@@ -66,8 +79,18 @@ func ValidateJSON(data []byte) error {
 	return nil
 }
 
-func compileSchema() (*jsonschema.Schema, error) {
-	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(inventoryschema.Current()))
+func schemaForVersion(version string) (*jsonschema.Schema, error) {
+	compiledSchemas.Lock()
+	defer compiledSchemas.Unlock()
+	if schema := compiledSchemas.values[version]; schema != nil {
+		return schema, nil
+	}
+
+	data, id, ok := inventoryschema.ByVersion(version)
+	if !ok {
+		return nil, fmt.Errorf("unsupported schema_version %q", version)
+	}
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("parse embedded schema: %w", err)
 	}
@@ -75,8 +98,13 @@ func compileSchema() (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	compiler.AssertFormat()
-	if err := compiler.AddResource(inventoryschema.ID, document); err != nil {
+	if err := compiler.AddResource(id, document); err != nil {
 		return nil, fmt.Errorf("add embedded schema: %w", err)
 	}
-	return compiler.Compile(inventoryschema.ID)
+	schema, err := compiler.Compile(id)
+	if err != nil {
+		return nil, err
+	}
+	compiledSchemas.values[version] = schema
+	return schema, nil
 }

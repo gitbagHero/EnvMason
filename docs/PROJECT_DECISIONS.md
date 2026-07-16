@@ -86,6 +86,17 @@
 - 决定：使用 `github.com/santhosh-tekuri/jsonschema/v6` v6.0.2 在本地嵌入并校验 Draft 2020-12 Schema，不在运行时联网获取 Schema。
 - 决定：I02 不增加 CLI 命令，不扫描系统，不执行外部命令，不进行版本比较或生成建议。
 
+### D-012：I03 macOS 系统只读探测与 Schema 演进
+
+- 状态：Accepted
+- 事实依据：macOS `sw_vers(1)` 将 ProductVersion 和 BuildVersion 定义为当前本机系统版本；`sysctl(8)` 在参数不含赋值时只读取内核状态。
+- 事实依据：[Apple 官方 Rosetta 文档](https://developer.apple.com/documentation/apple-silicon/about-the-rosetta-translation-environment)规定 `sysctl.proc_translated` 返回 `0` 表示原生进程、`1` 表示转译进程，OID 不存在表示原生执行。
+- 决定：Inventory Schema 当前版本升为 `0.2.0`，保留 `0.1.0` Schema 和原始 JSON 验证能力；不修改已经冻结的 `v0.1.0.json`。
+- 决定：System 增加 OS build、转译状态、结构化 Shell 和有序 PATH 条目；转译状态使用 `native`、`translated`、`unknown`，PATH 状态使用 `exists`、`missing`、`unknown`。
+- 决定：macOS 探测只调用 `sw_vers`、`sysctl` 和 `ps` 的只读查询形式，使用结构化参数、逐命令超时和输出上限，不通过 Shell 拼接命令，不保留原始 stderr。
+- 决定：环境变量只读取 `SHELL`、`PATH`、`HOME`；`HOME` 只用于把报告中的用户主目录替换为 `$HOME`，不输出通用环境变量集合。
+- 决定：I03 不新增 CLI 命令，不探测 Homebrew 或语言运行时，不联网，不修改 PATH、Shell、文件、包管理器或系统配置。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -151,3 +162,21 @@
 - 手动验收：维护者确认 I02 手动检测通过（2026-07-15）。
 - N/A：I02 不包含 CLI 新命令、真实系统探测、网络查询、版本比较、建议、配置或系统修改。
 - 结论：I02 已完成并被接受，已经提交到 `main` 且远程 CI 通过；I03 已具备顺序依赖条件，但尚未开始。
+
+## I03 验收记录
+
+- 增量：I03 macOS 系统只读探测
+- 开始日期：2026-07-15
+- 客观检查状态：本地通过（2026-07-15）；远程 CI 待分支推送后验证
+- 维护者最终验收：Accepted（2026-07-16）
+- 真机检查：macOS 15.7.4（Build 24G517）Apple Silicon 设备正确识别系统架构 `arm64`、进程架构 `arm64` 和转译状态 `native`。
+- 功能检查：fixture 覆盖原生 Apple Silicon、Rosetta、Intel、非 macOS 拒绝和命令失败降级；PATH 顺序、重复、存在、缺失、相对路径和空条目均有断言。
+- 隐私检查：只读取 `SHELL`、`PATH`、`HOME`；测试令牌未进入结果或错误，HOME 路径被替换为 `$HOME`，原始 stderr 被丢弃。
+- 只读检查：探测器只具备命令查询、环境读取和文件状态读取接口；固定命令列表不包含赋值、包管理器或写入命令；真机探测前后仓库状态一致。
+- 可靠性检查：逐命令超时、64 KiB 输出上限、未知父进程不误报为 Shell，以及失败 Finding 均通过测试。
+- Schema 检查：`0.2.0` 合法 fixture、公开示例和真机结果通过；缺少新增必填字段被拒绝；`0.1.0` fixture 继续通过原版本 Schema 校验。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./cmd/envmason`、gofmt 和 `git diff --check` 均通过。
+- 离线与跨平台检查：`GOPROXY=off` 核心测试通过；macOS 探测测试包面向 Linux amd64 和 Windows amd64 交叉编译通过。
+- 手动验收：维护者确认 I03 手动检测通过（2026-07-16）。
+- N/A：I03 不包含 CLI 新命令、Homebrew、语言运行时、网络查询、版本比较、建议、配置写入或系统修改。
+- 结论：I03 已完成并被接受；待提交到 `main` 且远程 CI 通过后，I04 具备顺序依赖条件。
