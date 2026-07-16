@@ -236,8 +236,8 @@
 
 - 增量：I05 Homebrew 只读适配器
 - 开始日期：2026-07-16
-- 客观检查状态：本地通过，远程 CI 待检查
-- 维护者最终验收：Pending（符合 D-014 预授权条件后自动更新）
+- 客观检查状态：本地与远程 CI 均通过（2026-07-16）
+- 维护者最终验收：Accepted（依据 D-014 维护者预授权，2026-07-16）
 - 功能检查：Homebrew 缺失返回 `not_installed` 且扫描成功；fixture 覆盖 Apple Silicon `/opt/homebrew` 与 Intel `/usr/local` 前缀、formula、cask、outdated、pin 和多版本安装。
 - 映射检查：formula 和 cask 映射到统一 Tool/Installation；直接安装与依赖安装可区分，`linked_keg` 对应生效与默认版本；映射结果通过 Inventory `0.2.0` Schema 校验。
 - 失败与隐私检查：命令失败和无效 JSON 降级为 Finding 后继续扫描；锁占用单独识别；测试令牌、原始错误、远端凭据、查询参数和 fragment 均未进入结果。
@@ -245,6 +245,7 @@
 - 真机检查：本机 Homebrew 6.0.9 的版本、前缀、仓库、formula、cask 和 outdated 查询成功；适配器运行前后 Homebrew 仓库状态与已安装包版本清单完全一致。
 - 可靠性检查：命令使用 30 秒超时、stdout/stderr 独立上限和不经 Shell 的参数调用；超限与失败路径测试通过。
 - 自动检查：`go test ./...`、`go test -race ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
-- 跨平台检查：全部包面向 Linux amd64 和 Windows amd64 编译通过。
+- 跨平台检查：全部包面向 Linux amd64 和 Windows amd64 编译通过；Windows CI 不执行依赖 POSIX 文件执行权限的 Homebrew 集成 fixture，但继续执行解析器、缺失场景、runner 和全仓测试。
+- CI 回归检查：首次远程运行暴露 Windows 无法用 POSIX 权限位构造 `brew` fixture；修复为 POSIX 路径跨宿主解析并限定该集成 fixture 的适用平台后，[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29485534755) 六个任务全部通过。
 - N/A：I05 不包含 CLI 新命令、公开 Schema 变更、网络版本查询、更新、安装、卸载、清理、换源、修复或系统修改。
-- 结论：I05 本地客观验收完成；等待 feature 提交的远程 CI，通过前不开始 I06。
+- 结论：I05 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；I06 已具备顺序依赖条件，但尚未开始。
