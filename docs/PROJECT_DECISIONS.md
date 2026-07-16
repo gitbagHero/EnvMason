@@ -142,6 +142,19 @@
 - 决定：I06 内部模型显式记录当前 Node、NVM 默认版本、管理来源、PATH 生效状态以及每个包管理器所属 Node Installation ID；I08 再负责公开报告映射。
 - 决定：I06 不新增 CLI 命令或公开 Schema，不安装/删除 Node，不修改 NVM alias，不运行 Corepack enable/disable，不升级全局包，也不执行网络请求或配置写入。
 
+### D-017：I07 Java 生态只读适配器
+
+- 状态：Accepted
+- 事实依据：macOS 自带 `java_home(1)` 的 `-X` 选项以 XML plist 列出匹配 JVM 及其属性；默认调用只返回适合 `JAVA_HOME` 的路径，`--exec` 才会执行 JDK 工具，I07 不使用后者。
+- 事实依据：[jenv 官方 README](https://github.com/jenv/jenv)说明 jenv 不安装 Java，只登记既有 JDK；版本选择优先级为 shell、local、global，local 通过项目或父目录中的 `.java-version` 表达。
+- 事实依据：[Maven 官方 CLI 参考](https://maven.apache.org/ref/3.9.6/maven-embedder/cli.html)定义 `--version` 只显示版本信息；[Gradle 官方 CLI 文档](https://docs.gradle.org/current/userguide/command_line_interface.html)定义 `--version` 打印 Gradle 与 Launcher/Daemon JVM 信息后退出，`--no-daemon` 禁用 Daemon，`--offline` 禁止网络依赖访问。
+- 决定：系统注册 JDK 使用固定 `/usr/libexec/java_home -X` 结构化输出；Homebrew JDK 只读遍历明确前缀下的 `opt/openjdk*`/`opt/java` 链接并解析 JDK `release` 文件，按规范化 home 路径去重。
+- 决定：jenv 不通过命令查询，更不调用 add/global/local 等写操作；只读解析 `versions` 注册链接、根 `version`、请求显式提供的 shell 版本和从实际存在工作目录向父级查找的最近 `.java-version`。失效或循环链接产生 Finding。
+- 决定：实际 `java` 只允许 `-XshowSettings:properties -version`；只保留 `java.home`、`java.version`、`java.vendor` 和 `os.arch` 白名单字段，忽略其余属性及原始输出。
+- 决定：Maven 只允许 `--version` 并设置 `MAVEN_SKIP_RC=1`；Gradle 只允许 `--version --no-daemon --offline --console=plain`，不执行 Wrapper。命令使用 15 秒超时、512 KiB 合并输出上限和最小受控环境，不继承 `JAVA_TOOL_OPTIONS`、`MAVEN_OPTS` 或用户秘密。
+- 决定：内部模型分别记录 JDK 安装、当前 Java、JAVA_HOME、jenv 选择、Maven runtime 与 Gradle Launcher/Daemon JVM；JAVA_HOME、jenv、Maven 或 Gradle 与当前 Java 不一致时产生独立 Finding，单项失败不阻断其他字段。
+- 决定：I07 不新增 CLI 命令或公开 Schema，不安装、升级或删除 JDK，不修改 jenv/JAVA_HOME/项目文件，不运行构建任务、Wrapper、Daemon 管理或网络请求；I08 再负责公开报告映射。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -280,3 +293,21 @@
 - CI 回归检查：首次远程运行暴露 Windows 不能构造 NVM 的 POSIX `lts/*` alias 文件；限定该文件系统集成 fixture 的适用平台后，[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29487223348) 六个任务全部通过。
 - N/A：I06 不包含 CLI 新命令、公开 Schema、项目 packageManager 评估、联网版本查询、安装、删除、alias 修改、全局包升级或任何系统修改。
 - 结论：I06 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；I07 已具备顺序依赖条件，但尚未开始。
+
+## I07 验收记录
+
+- 增量：I07 Java 生态只读适配器
+- 开始日期：2026-07-16
+- 客观检查状态：本地通过，远程 CI 待检查
+- 维护者最终验收：Pending（符合 D-014 预授权条件后自动更新）
+- JDK 检查：fixture 覆盖单 JDK、系统与 Homebrew 多 JDK、JAVA_HOME 去重和架构/厂商元数据；系统 plist、Homebrew `release` 和 jenv 注册指向同一 home 时合并为一个安装。
+- jenv 检查：global/local/shell 优先级可分别表达；local 从存在项目目录向父级查找最近 `.java-version`，不存在项目目录不产生虚假 local；断裂注册产生 Finding 后继续扫描。
+- 运行时检查：当前 `java` 只保留四个白名单属性并关联到 JDK ID；Maven 与 Gradle 的工具版本、Java 版本和 runtime home 独立表达。
+- 冲突检查：fixture 验证 jenv local 与实际 Java 不一致、Maven Java 与实际 Java 不一致分别产生 Finding；Gradle Java 一致时不误报。
+- 失败与隐私检查：系统注册、当前 Java、Maven、Gradle 任一命令失败只影响对应字段；固定错误不包含 runner 原始输出或测试令牌，HOME 路径脱敏，子进程不继承 Java/Maven 注入钩子。
+- 真机检查：本机去重识别 10 个 JDK，当前 Java、jenv global 和 Maven runtime 均为 25.0.3；正确保留 Java 8/17/21/23/24 等其他安装。扫描前后 jenv、Maven 与 Gradle 用户目录的路径、时间和权限快照一致。
+- 安全检查：仅调用 `java_home -X`、`java -XshowSettings:properties -version`、`mvn --version` 和 `gradle --version --no-daemon --offline --console=plain`；未发现安装、删除、jenv 写入、构建任务、Wrapper 或 Daemon 管理命令。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
+- 离线与跨平台检查：`GOPROXY=off` I07 核心测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过。
+- N/A：I07 不包含 CLI 新命令、公开 Schema、远程版本/EOL、安装、升级、删除、配置写入或系统修改。
+- 结论：I07 本地客观验收完成；等待 feature 提交的远程 CI，通过前不开始 I08。
