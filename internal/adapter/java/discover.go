@@ -115,7 +115,7 @@ func discover(ctx context.Context, request Request, deps dependencies) (Result, 
 	}
 
 	result.Maven = discoverBuildTool(ctx, "mvn", []string{"--version"}, request, deps, &collector, parseMaven)
-	result.Gradle = discoverBuildTool(ctx, "gradle", []string{"--version", "--no-daemon", "--offline", "--console=plain"}, request, deps, &collector, parseGradle)
+	result.Gradle = discoverGradle(ctx, request, result.Current, &collector)
 
 	for _, record := range records {
 		sort.Strings(record.installation.JenvAliases)
@@ -264,6 +264,95 @@ func discoverBuildTool(ctx context.Context, command string, args []string, reque
 		findings.add(strings.ToUpper(name)+"_VERSION_OUTPUT_INVALID", "A build-tool version query returned unrecognized output.", []string{candidate.Path})
 	}
 	return parsed
+}
+
+func discoverGradle(ctx context.Context, request Request, current Runtime, findings *findingCollector) BuildTool {
+	result := unknownBuildTool("gradle")
+	discovered, err := discoverCommand(ctx, "gradle", request)
+	if err != nil {
+		findings.add("GRADLE_DISCOVERY_FAILED", "Gradle could not be discovered.", []string{"gradle"})
+		return result
+	}
+	findings.append(discovered.Findings)
+	candidate := effectiveCandidate(discovered)
+	if candidate == nil {
+		result.State = StateNotInstalled
+		return result
+	}
+	result.Path = candidate.Path
+	result.ResolvedPath = candidate.ResolvedPath
+	distributionHome, version := gradleDistribution(candidate.AccessPath())
+	if version == "" {
+		result.State = StateUnknown
+		findings.add("GRADLE_METADATA_UNAVAILABLE", "Gradle distribution metadata could not be read without executing Gradle.", []string{candidate.Path})
+		return result
+	}
+	result.State = StateInstalled
+	result.Version = version
+	result.Home = redactHome(distributionHome, request.Home)
+	javaHome := gradleConfiguredJavaHome(request)
+	if javaHome != "" {
+		result.JavaHome = redactHome(javaHome, request.Home)
+		if javaVersion, _, _, releaseErr := parseReleaseFile(javaHome); releaseErr == nil {
+			result.JavaVersion = javaVersion
+		} else {
+			findings.add("GRADLE_JAVA_HOME_INVALID", "Gradle's configured Java home does not contain readable JDK metadata.", []string{result.JavaHome})
+		}
+	} else if current.State == StateInstalled {
+		result.JavaHome = current.Home
+		result.JavaVersion = current.Version
+	}
+	return result
+}
+
+func gradleDistribution(executablePath string) (string, string) {
+	root := filepath.Dir(filepath.Dir(executablePath))
+	entries, err := os.ReadDir(filepath.Join(root, "lib"))
+	if err != nil {
+		return "", ""
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		for _, prefix := range []string{"gradle-core-", "gradle-runtime-api-info-"} {
+			if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".jar") {
+				version := strings.TrimSuffix(strings.TrimPrefix(name, prefix), ".jar")
+				if validSelection(version) {
+					return root, version
+				}
+			}
+		}
+	}
+	return "", ""
+}
+
+func gradleConfiguredJavaHome(request Request) string {
+	userHome := request.GradleUserHome
+	if userHome == "" && request.Home != "" {
+		userHome = filepath.Join(request.Home, ".gradle")
+	}
+	for _, path := range []string{filepath.Join(userHome, "gradle.properties"), filepath.Join(request.WorkingDirectory, "gradle.properties")} {
+		if value := readGradleJavaHome(path); value != "" {
+			if filepath.IsAbs(value) {
+				return filepath.Clean(value)
+			}
+			return ""
+		}
+	}
+	return request.JavaHome
+}
+
+func readGradleJavaHome(path string) string {
+	value, err := readSmallFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(value, "\n") {
+		key, property, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && strings.TrimSpace(key) == "org.gradle.java.home" {
+			return strings.TrimSpace(property)
+		}
+	}
+	return ""
 }
 
 func addConflictFindings(request Request, result *Result, findings *findingCollector) {

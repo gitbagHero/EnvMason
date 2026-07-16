@@ -166,31 +166,6 @@ func parseMaven(output, home string) BuildTool {
 	return result
 }
 
-func parseGradle(output, home string) BuildTool {
-	result := BuildTool{State: StateUnknown, Name: "gradle", Version: unknown, Home: unknown, JavaVersion: unknown, JavaHome: unknown}
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(line, "Gradle home:"):
-			result.Home = redactHome(strings.TrimSpace(strings.TrimPrefix(line, "Gradle home:")), home)
-		case strings.HasPrefix(line, "Gradle "):
-			result.Version = safeValue(strings.TrimPrefix(line, "Gradle "))
-		case strings.HasPrefix(line, "Launcher JVM:"):
-			value := strings.TrimSpace(strings.TrimPrefix(line, "Launcher JVM:"))
-			version, _, _ := strings.Cut(value, " ")
-			result.JavaVersion = safeValue(version)
-		case strings.HasPrefix(line, "Daemon JVM:"):
-			value := strings.TrimSpace(strings.TrimPrefix(line, "Daemon JVM:"))
-			javaHome, _, _ := strings.Cut(value, " (")
-			result.JavaHome = redactHome(strings.TrimSpace(javaHome), home)
-		}
-	}
-	if result.Version != unknown {
-		result.State = StateInstalled
-	}
-	return result
-}
-
 func parseArchitecture(value string) inventory.Architecture {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "arm64", "aarch64":

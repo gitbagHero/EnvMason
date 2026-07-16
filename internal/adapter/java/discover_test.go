@@ -117,7 +117,8 @@ func TestDiscoverMultipleJDKsBrokenJenvAndMavenMismatch(t *testing.T) {
 	javaPath := writeExecutable(t, shimDirectory, "java")
 	toolBin := filepath.Join(root, "tools", "bin")
 	mavenPath := writeExecutable(t, toolBin, "mvn")
-	gradlePath := writeExecutable(t, toolBin, "gradle")
+	_ = writeExecutable(t, toolBin, "gradle")
+	writeText(t, filepath.Join(filepath.Dir(toolBin), "lib", "gradle-core-9.1.0.jar"), "fixture")
 	runner := newFakeRunner()
 	request := fixtureRequest(project, []string{shimDirectory, toolBin})
 	request.Home = root
@@ -127,7 +128,6 @@ func TestDiscoverMultipleJDKsBrokenJenvAndMavenMismatch(t *testing.T) {
 	runner.responses[commandKey(request.JavaHomeTool, []string{"-X"})] = javaHomeXML(systemHome, "21.0.7", "Microsoft", "arm64")
 	runner.responses[commandKey(javaPath, []string{"-XshowSettings:properties", "-version"})] = javaSettings("25.0.3", homebrewHome, "Homebrew", "aarch64")
 	runner.responses[commandKey(mavenPath, []string{"--version"})] = mavenOutput("3.9.16", "21.0.7", systemHome)
-	runner.responses[commandKey(gradlePath, []string{"--version", "--no-daemon", "--offline", "--console=plain"})] = gradleOutput("9.1.0", "25.0.3", homebrewHome)
 
 	result, err := discover(context.Background(), request, dependencies{runner: runner})
 	if err != nil {
@@ -179,13 +179,12 @@ func TestCommandFailuresAreIsolatedAndSanitized(t *testing.T) {
 	bin := filepath.Join(root, "bin")
 	javaPath := writeExecutable(t, bin, "java")
 	mavenPath := writeExecutable(t, bin, "mvn")
-	gradlePath := writeExecutable(t, bin, "gradle")
+	_ = writeExecutable(t, bin, "gradle")
 	request := fixtureRequest(root, []string{bin})
 	runner := newFakeRunner()
 	runner.failures[commandKey(request.JavaHomeTool, []string{"-X"})] = errors.New(secret)
 	runner.failures[commandKey(javaPath, []string{"-XshowSettings:properties", "-version"})] = errors.New(secret)
 	runner.responses[commandKey(mavenPath, []string{"--version"})] = mavenOutput("3.9.16", "21.0.7", "/jdk/21")
-	runner.failures[commandKey(gradlePath, []string{"--version", "--no-daemon", "--offline", "--console=plain"})] = errors.New(secret)
 
 	result, err := discover(context.Background(), request, dependencies{runner: runner})
 	if err != nil {
@@ -200,7 +199,7 @@ func TestCommandFailuresAreIsolatedAndSanitized(t *testing.T) {
 	}
 	assertFindingCode(t, result.Findings, "JAVA_HOME_REGISTRY_QUERY_FAILED")
 	assertFindingCode(t, result.Findings, "JAVA_RUNTIME_QUERY_FAILED")
-	assertFindingCode(t, result.Findings, "GRADLE_VERSION_QUERY_FAILED")
+	assertFindingCode(t, result.Findings, "GRADLE_METADATA_UNAVAILABLE")
 }
 
 func TestDiscoverRealJavaEnvironmentReadOnly(t *testing.T) {
@@ -265,10 +264,6 @@ func mavenOutput(version, javaVersion, javaHome string) string {
 	return fmt.Sprintf("Apache Maven %s (fixture)\nMaven home: /opt/maven\nJava version: %s, vendor: Fixture, runtime: %s\n", version, javaVersion, javaHome)
 }
 
-func gradleOutput(version, javaVersion, javaHome string) string {
-	return fmt.Sprintf("------------------------------------------------------------\nGradle %s\n------------------------------------------------------------\nLauncher JVM: %s (Fixture)\nDaemon JVM: %s (no JDK specified, using current Java home)\n", version, javaVersion, javaHome)
-}
-
 func writeRelease(t *testing.T, home, version, vendor, architecture string) {
 	t.Helper()
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -321,10 +316,9 @@ func assertNoFindingCode(t *testing.T, findings []inventory.Finding, code string
 func assertReadOnlyCalls(t *testing.T, calls []runnerCall) {
 	t.Helper()
 	allowed := map[string]bool{
-		strings.Join([]string{"-X"}, "\x00"):                                                       true,
-		strings.Join([]string{"-XshowSettings:properties", "-version"}, "\x00"):                    true,
-		strings.Join([]string{"--version"}, "\x00"):                                                true,
-		strings.Join([]string{"--version", "--no-daemon", "--offline", "--console=plain"}, "\x00"): true,
+		strings.Join([]string{"-X"}, "\x00"):                                    true,
+		strings.Join([]string{"-XshowSettings:properties", "-version"}, "\x00"): true,
+		strings.Join([]string{"--version"}, "\x00"):                             true,
 	}
 	for _, call := range calls {
 		if !allowed[strings.Join(call.args, "\x00")] {

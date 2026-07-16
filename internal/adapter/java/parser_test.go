@@ -13,7 +13,4 @@ func TestParsersRejectMalformedOrIncompleteData(t *testing.T) {
 	if got := parseMaven("not maven", ""); got.State != StateUnknown {
 		t.Fatalf("invalid Maven output = %#v", got)
 	}
-	if got := parseGradle("not gradle", ""); got.State != StateUnknown {
-		t.Fatalf("invalid Gradle output = %#v", got)
-	}
 }
