@@ -267,8 +267,8 @@
 
 - 增量：I06 Node.js 生态只读适配器
 - 开始日期：2026-07-16
-- 客观检查状态：本地通过，远程 CI 待检查
-- 维护者最终验收：Pending（符合 D-014 预授权条件后自动更新）
+- 客观检查状态：本地与远程 CI 均通过（2026-07-16）
+- 维护者最终验收：Accepted（依据 D-014 维护者预授权，2026-07-16）
 - 场景检查：fixture 覆盖仅系统 Node、仅 NVM、多来源和无 Node；另覆盖 Homebrew 来源、Node 22 保留且 Node 24 为默认、NVM 未加载时从默认磁盘目录降级发现。
 - NVM 检查：安装版本按版本目录稳定发现；default 支持数字前缀、`node` 和多级 alias，循环 alias 被拒绝；当前 Shell 生效版本与默认版本分别表达。
 - 归属检查：npm 和 Corepack pnpm 代理均关联到明确的 Node Installation ID；PATH 生效、遮蔽、多来源和离线 NVM 包管理器实例可区分。
@@ -276,6 +276,7 @@
 - 失败与隐私检查：版本命令失败、非法输出、NVM 未加载、alias 无法解析和候选异常均降级为固定 Finding；runner stderr、测试令牌、`NODE_OPTIONS` 和 npm token 未进入结果或子进程环境，HOME 路径被替换为 `$HOME`。
 - 真机检查：本机发现 6 个 NVM Node 版本和 20 个 npm/Corepack/pnpm/Yarn 实例，正确识别当前与默认 Node v26.5.0；扫描前后 NVM alias、版本目录的路径、时间和权限快照一致。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
-- 离线与跨平台检查：`GOPROXY=off` I06 核心测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过。
+- 离线与跨平台检查：`GOPROXY=off` I06 核心测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过。Windows CI 不执行依赖 POSIX 执行权限、软链接和 `lts/*` 文件名的 NVM 集成 fixture，但继续执行 runner 和全仓测试。
+- CI 回归检查：首次远程运行暴露 Windows 不能构造 NVM 的 POSIX `lts/*` alias 文件；限定该文件系统集成 fixture 的适用平台后，[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29487223348) 六个任务全部通过。
 - N/A：I06 不包含 CLI 新命令、公开 Schema、项目 packageManager 评估、联网版本查询、安装、删除、alias 修改、全局包升级或任何系统修改。
-- 结论：I06 本地客观验收完成；等待 feature 提交的远程 CI，通过前不开始 I07。
+- 结论：I06 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；I07 已具备顺序依赖条件，但尚未开始。
