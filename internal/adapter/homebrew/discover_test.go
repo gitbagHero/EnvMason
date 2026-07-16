@@ -57,6 +57,9 @@ func TestDiscoverReportsHomebrewNotInstalled(t *testing.T) {
 
 func TestDiscoverMapsReadOnlyHomebrewJSON(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Homebrew executable fixture uses POSIX execute permissions")
+	}
 
 	root := t.TempDir()
 	brewPath := createExecutable(t, root, "brew")
@@ -110,6 +113,9 @@ func TestDiscoverMapsReadOnlyHomebrewJSON(t *testing.T) {
 
 func TestDiscoverContinuesAfterFailuresAndDoesNotLeakOutput(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Homebrew executable fixture uses POSIX execute permissions")
+	}
 
 	const secret = "homebrew-secret-must-not-leak"
 	root := t.TempDir()

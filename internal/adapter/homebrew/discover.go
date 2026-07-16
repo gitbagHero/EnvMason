@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -200,7 +201,7 @@ func inferArchitecture(prefix string, candidates []inventory.Architecture, fallb
 			return architecture
 		}
 	}
-	switch filepath.Clean(prefix) {
+	switch path.Clean(prefix) {
 	case "/opt/homebrew":
 		return inventory.ArchitectureARM64
 	case "/usr/local":

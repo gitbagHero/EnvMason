@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
+	pathpkg "path"
 	"sort"
 	"strings"
 
@@ -107,7 +107,7 @@ func parseInfo(data []byte, cellar, caskroom, home string, architecture inventor
 			}
 			path := "unknown"
 			if cellar != "" {
-				path = redactHome(filepath.Join(cellar, formula.Name, installed.Version), home)
+				path = redactHome(pathpkg.Join(cellar, formula.Name, installed.Version), home)
 			}
 			installations = append(installations, inventory.Installation{
 				ID:                "homebrew:formula:" + name + ":" + installed.Version,
@@ -148,7 +148,7 @@ func parseInfo(data []byte, cellar, caskroom, home string, architecture inventor
 			}
 			path := artifactTarget
 			if path == "" && caskroom != "" {
-				path = filepath.Join(caskroom, cask.Token, version)
+				path = pathpkg.Join(caskroom, cask.Token, version)
 			}
 			if path == "" {
 				path = "unknown"
