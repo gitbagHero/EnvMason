@@ -298,8 +298,8 @@
 
 - 增量：I07 Java 生态只读适配器
 - 开始日期：2026-07-16
-- 客观检查状态：本地通过，远程 CI 待检查
-- 维护者最终验收：Pending（符合 D-014 预授权条件后自动更新）
+- 客观检查状态：本地与远程 CI 均通过
+- 维护者最终验收：Accepted（依据 D-014 预授权）
 - JDK 检查：fixture 覆盖单 JDK、系统与 Homebrew 多 JDK、JAVA_HOME 去重和架构/厂商元数据；系统 plist、Homebrew `release` 和 jenv 注册指向同一 home 时合并为一个安装。
 - jenv 检查：global/local/shell 优先级可分别表达；local 从存在项目目录向父级查找最近 `.java-version`，不存在项目目录不产生虚假 local；断裂注册产生 Finding 后继续扫描。
 - 运行时检查：当前 `java` 只保留四个白名单属性并关联到 JDK ID；Maven 的工具版本、Java 版本和 runtime home 独立表达；Gradle 只根据本地分发元数据及已有配置表达可确定字段。
@@ -309,5 +309,6 @@
 - 安全检查：仅调用 `java_home -X`、`java -XshowSettings:properties -version` 和 `mvn --version`；Gradle 完全不执行，未发现安装、删除、jenv 写入、构建任务、Wrapper 或 Daemon 管理命令。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
 - 离线与跨平台检查：`GOPROXY=off` I07 核心测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过。
+- CI 回归检查：首次远程运行发现 macOS 预装 Gradle 即使仅查询版本也会初始化用户目录；改为只读解析本地分发元数据与已有配置后，[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29489120547) 六个任务全部通过。
 - N/A：I07 不包含 CLI 新命令、公开 Schema、远程版本/EOL、安装、升级、删除、配置写入或系统修改。
-- 结论：I07 本地客观验收完成；等待 feature 提交的远程 CI，通过前不开始 I08。
+- 结论：I07 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；按维护者要求在此暂停，I08 尚未开始。
