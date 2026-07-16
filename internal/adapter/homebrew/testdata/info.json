@@ -1,0 +1,51 @@
+{
+  "formulae": [
+    {
+      "name": "node",
+      "full_name": "node",
+      "tap": "homebrew/core",
+      "linked_keg": "24.4.0",
+      "keg_only": false,
+      "installed": [
+        {
+          "version": "22.17.0",
+          "installed_on_request": true,
+          "installed_as_dependency": false
+        },
+        {
+          "version": "24.4.0",
+          "installed_on_request": true,
+          "installed_as_dependency": false
+        }
+      ]
+    },
+    {
+      "name": "icu4c@77",
+      "full_name": "icu4c@77",
+      "tap": "homebrew/core",
+      "linked_keg": "",
+      "keg_only": true,
+      "installed": [
+        {
+          "version": "77.1",
+          "installed_on_request": false,
+          "installed_as_dependency": true
+        }
+      ]
+    }
+  ],
+  "casks": [
+    {
+      "token": "visual-studio-code",
+      "full_token": "visual-studio-code",
+      "tap": "homebrew/cask",
+      "installed": "1.102.0",
+      "artifacts": [
+        {
+          "app": ["Visual Studio Code.app"],
+          "target": "/Applications/Visual Studio Code.app"
+        }
+      ]
+    }
+  ]
+}

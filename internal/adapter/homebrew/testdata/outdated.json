@@ -1,0 +1,20 @@
+{
+  "formulae": [
+    {
+      "name": "node",
+      "installed_versions": ["24.4.0"],
+      "current_version": "24.5.0",
+      "pinned": false,
+      "pinned_version": null
+    }
+  ],
+  "casks": [
+    {
+      "name": "visual-studio-code",
+      "installed_versions": ["1.102.0"],
+      "current_version": "1.103.0",
+      "pinned": true,
+      "pinned_version": "1.102.0"
+    }
+  ]
+}

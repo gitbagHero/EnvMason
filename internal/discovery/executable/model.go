@@ -39,6 +39,13 @@ type Candidate struct {
 	Executable        bool
 	Effective         bool
 	Duplicate         bool
+	accessPath        string
+}
+
+// AccessPath returns the unredacted resolved path for another deterministic
+// core component. It must never be copied into reports or logs directly.
+func (c Candidate) AccessPath() string {
+	return c.accessPath
 }
 
 // Result retains candidates in PATH order and records non-fatal findings.

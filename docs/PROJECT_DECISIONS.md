@@ -118,6 +118,17 @@
 - 决定：授权不覆盖新的产品范围、安全边界、许可证、公开接口或公开 Schema 决策，也不覆盖高风险系统操作；遇到这些事项或存在实质歧义时必须暂停并由维护者决定。
 - 决定：每个增量仍须单独记录范围、测试和验收证据，保持提交单一、可理解、可回退；不得把多个未验收增量合并成一个提交后一次性验证。
 
+### D-015：I05 Homebrew 只读适配器
+
+- 状态：Accepted
+- 事实依据：[Homebrew 官方手册](https://docs.brew.sh/Manpage)定义 `info --json=v2 --installed` 和 `outdated --json=v2` 的结构化只读查询形式，并提供 `--prefix`、`--repository`、`--cellar` 和 `--caskroom` 路径查询。
+- 决定：I05 只调用固定白名单：`brew --version`、`--prefix`、`--repository`、`--cellar`、`--caskroom`、`info --json=v2 --installed`、`outdated --json=v2`，以及 `git -C <repository> remote get-url origin`；不接受外部命令参数，也不调用任何变更命令。
+- 决定：`brew` 和 `git` 都必须由 I04 按请求中的 PATH 顺序确定实际可执行路径；报告字段只保留脱敏路径，未脱敏路径仅供确定性核心内部执行。
+- 决定：所有查询设置 `HOMEBREW_NO_AUTO_UPDATE=1`、`HOMEBREW_NO_ANALYTICS=1` 和 `HOMEBREW_NO_ENV_HINTS=1`，使用结构化参数、30 秒超时、32 MiB stdout 与 64 KiB stderr 上限，不经 Shell 拼接。
+- 决定：formula 与 cask 分别映射为统一 Tool/Installation；formula 的 `installed_on_request=true` 记为直接安装，否则记为依赖安装；`linked_keg` 用于表达生效和默认版本，keg-only 未链接版本保守记为未知。
+- 决定：Homebrew 仓库远端移除 URL 用户信息、查询参数和 fragment；命令错误与原始 stderr 不进入结果，只输出固定 Finding，锁占用单独分类。
+- 决定：I05 不新增 CLI 命令或公开 Schema，不运行 `brew update`、安装、升级、卸载、清理、tap/untap、换源或修复；报告整合属于 I08，变更能力属于后续增量。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -220,3 +231,20 @@
 - 远程检查：[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29483813206) 通过。
 - N/A：I04 不包含 CLI 新命令、包管理器映射、版本获取、Homebrew、网络请求、配置读取或任何系统修改。
 - 结论：I04 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；I05 已具备顺序依赖条件，但尚未开始。
+
+## I05 验收记录
+
+- 增量：I05 Homebrew 只读适配器
+- 开始日期：2026-07-16
+- 客观检查状态：本地通过，远程 CI 待检查
+- 维护者最终验收：Pending（符合 D-014 预授权条件后自动更新）
+- 功能检查：Homebrew 缺失返回 `not_installed` 且扫描成功；fixture 覆盖 Apple Silicon `/opt/homebrew` 与 Intel `/usr/local` 前缀、formula、cask、outdated、pin 和多版本安装。
+- 映射检查：formula 和 cask 映射到统一 Tool/Installation；直接安装与依赖安装可区分，`linked_keg` 对应生效与默认版本；映射结果通过 Inventory `0.2.0` Schema 校验。
+- 失败与隐私检查：命令失败和无效 JSON 降级为 Finding 后继续扫描；锁占用单独识别；测试令牌、原始错误、远端凭据、查询参数和 fragment 均未进入结果。
+- 安全检查：测试逐项断言八种固定只读查询及三项 Homebrew 防副作用环境变量；未发现 update、安装、升级、卸载、清理、tap/untap 或换源调用。
+- 真机检查：本机 Homebrew 6.0.9 的版本、前缀、仓库、formula、cask 和 outdated 查询成功；适配器运行前后 Homebrew 仓库状态与已安装包版本清单完全一致。
+- 可靠性检查：命令使用 30 秒超时、stdout/stderr 独立上限和不经 Shell 的参数调用；超限与失败路径测试通过。
+- 自动检查：`go test ./...`、`go test -race ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
+- 跨平台检查：全部包面向 Linux amd64 和 Windows amd64 编译通过。
+- N/A：I05 不包含 CLI 新命令、公开 Schema 变更、网络版本查询、更新、安装、卸载、清理、换源、修复或系统修改。
+- 结论：I05 本地客观验收完成；等待 feature 提交的远程 CI，通过前不开始 I06。

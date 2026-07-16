@@ -139,6 +139,7 @@ func inspectCandidate(path string, position int, deps dependencies, findings *fi
 		ResolvedPath:      findings.redact(path),
 		LinkState:         LinkStateNotLink,
 		Architectures:     []inventory.Architecture{inventory.ArchitectureUnknown},
+		accessPath:        path,
 	}
 	resolvedPath := path
 	resolvedInfo := info
@@ -161,6 +162,7 @@ func inspectCandidate(path string, position int, deps dependencies, findings *fi
 	if info.Mode()&fs.ModeSymlink != 0 || filepath.Clean(resolvedPath) != filepath.Clean(path) {
 		candidate.LinkState = LinkStateResolved
 		candidate.ResolvedPath = findings.redact(resolvedPath)
+		candidate.accessPath = resolvedPath
 	}
 	if filepath.Clean(resolvedPath) != filepath.Clean(path) || info.Mode()&fs.ModeSymlink != 0 {
 		resolvedInfo, err = deps.files.Stat(resolvedPath)
