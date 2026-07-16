@@ -242,6 +242,7 @@ func TestDiscoverRejectsUntrustedVersionOutput(t *testing.T) {
 
 func TestResolveDefaultAliasChainAndLoop(t *testing.T) {
 	t.Parallel()
+	requirePOSIXFixture(t)
 
 	root := t.TempDir()
 	writeAlias(t, root, "default", "lts/*")
