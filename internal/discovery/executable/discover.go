@@ -140,6 +140,7 @@ func inspectCandidate(path string, position int, deps dependencies, findings *fi
 		LinkState:         LinkStateNotLink,
 		Architectures:     []inventory.Architecture{inventory.ArchitectureUnknown},
 		accessPath:        path,
+		invocationPath:    path,
 	}
 	resolvedPath := path
 	resolvedInfo := info

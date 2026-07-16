@@ -40,6 +40,13 @@ type Candidate struct {
 	Effective         bool
 	Duplicate         bool
 	accessPath        string
+	invocationPath    string
+}
+
+// InvocationPath returns the unredacted path encountered in PATH order. It is
+// intended only for bounded invocation by another deterministic core component.
+func (c Candidate) InvocationPath() string {
+	return c.invocationPath
 }
 
 // AccessPath returns the unredacted resolved path for another deterministic

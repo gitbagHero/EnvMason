@@ -129,6 +129,19 @@
 - 决定：Homebrew 仓库远端移除 URL 用户信息、查询参数和 fragment；命令错误与原始 stderr 不进入结果，只输出固定 Finding，锁占用单独分类。
 - 决定：I05 不新增 CLI 命令或公开 Schema，不运行 `brew update`、安装、升级、卸载、清理、tap/untap、换源或修复；报告整合属于 I08，变更能力属于后续增量。
 
+### D-016：I06 Node.js 生态只读适配器
+
+- 状态：Accepted
+- 事实依据：[NVM 官方 README](https://github.com/nvm-sh/nvm)说明 NVM 是按用户、按 Shell 生效的版本管理器，会修改 PATH，并在 `$NVM_DIR/versions/node` 保存安装版本、通过 alias 表达默认版本；默认安装目录还受 `XDG_CONFIG_HOME` 影响。
+- 事实依据：[Corepack 官方 README](https://github.com/nodejs/corepack/blob/main/README.md)说明 pnpm/Yarn 代理会按项目配置选择版本，缺失时可能访问网络并写入缓存；`COREPACK_ENABLE_NETWORK=0` 可禁止网络访问。Node.js 25 的[官方文档](https://nodejs.org/download/release/v25.8.0/docs/api/corepack.html)还明确 Corepack 从 Node.js 25 起不再随 Node 分发。
+- 决定：I06 不 source Shell 配置、不调用 `nvm` 函数；通过明确的 `NVM_DIR`、`XDG_CONFIG_HOME/nvm` 或 `$HOME/.nvm` 候选，以只读文件遍历发现已安装版本和 default alias。
+- 决定：NVM alias 只接受受限名称，单文件上限 4 KiB，递归解析深度上限 16；支持具体版本、数字前缀、`node`/`stable` 和 alias 链，循环、越界或无已安装匹配均降级为 Finding。
+- 决定：Node 与 npm/Corepack/pnpm/Yarn 候选复用 I04 的 PATH 顺序、软链接和架构发现；内部同时保留未脱敏调用路径和解析目标，公开结果只使用 `$HOME` 脱敏路径。
+- 决定：版本优先从 NVM 目录名或本地受限 `package.json` 元数据读取；必要执行只允许固定 `--version` 参数、10 秒超时和 64 KiB 双向输出上限，不经 Shell。
+- 决定：版本进程使用最小受控环境，不继承 `NODE_OPTIONS`、npm token 或用户钩子；Corepack 网络、自动 pin、项目版本选择、下载提示和 latest 查询均关闭。识别为 Corepack 的 pnpm/Yarn 代理不执行，版本保守记为动态未知并记录 Corepack provider 版本。
+- 决定：I06 内部模型显式记录当前 Node、NVM 默认版本、管理来源、PATH 生效状态以及每个包管理器所属 Node Installation ID；I08 再负责公开报告映射。
+- 决定：I06 不新增 CLI 命令或公开 Schema，不安装/删除 Node，不修改 NVM alias，不运行 Corepack enable/disable，不升级全局包，也不执行网络请求或配置写入。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -249,3 +262,20 @@
 - CI 回归检查：首次远程运行暴露 Windows 无法用 POSIX 权限位构造 `brew` fixture；修复为 POSIX 路径跨宿主解析并限定该集成 fixture 的适用平台后，[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29485534755) 六个任务全部通过。
 - N/A：I05 不包含 CLI 新命令、公开 Schema 变更、网络版本查询、更新、安装、卸载、清理、换源、修复或系统修改。
 - 结论：I05 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；I06 已具备顺序依赖条件，但尚未开始。
+
+## I06 验收记录
+
+- 增量：I06 Node.js 生态只读适配器
+- 开始日期：2026-07-16
+- 客观检查状态：本地通过，远程 CI 待检查
+- 维护者最终验收：Pending（符合 D-014 预授权条件后自动更新）
+- 场景检查：fixture 覆盖仅系统 Node、仅 NVM、多来源和无 Node；另覆盖 Homebrew 来源、Node 22 保留且 Node 24 为默认、NVM 未加载时从默认磁盘目录降级发现。
+- NVM 检查：安装版本按版本目录稳定发现；default 支持数字前缀、`node` 和多级 alias，循环 alias 被拒绝；当前 Shell 生效版本与默认版本分别表达。
+- 归属检查：npm 和 Corepack pnpm 代理均关联到明确的 Node Installation ID；PATH 生效、遮蔽、多来源和离线 NVM 包管理器实例可区分。
+- Corepack 安全检查：pnpm/Yarn Corepack 代理不执行；动态版本记为 `unknown` 并记录 provider 版本；所有允许的版本进程只使用 `--version`，且 Corepack 网络、latest、auto-pin、项目选择和下载提示均关闭。
+- 失败与隐私检查：版本命令失败、非法输出、NVM 未加载、alias 无法解析和候选异常均降级为固定 Finding；runner stderr、测试令牌、`NODE_OPTIONS` 和 npm token 未进入结果或子进程环境，HOME 路径被替换为 `$HOME`。
+- 真机检查：本机发现 6 个 NVM Node 版本和 20 个 npm/Corepack/pnpm/Yarn 实例，正确识别当前与默认 Node v26.5.0；扫描前后 NVM alias、版本目录的路径、时间和权限快照一致。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
+- 离线与跨平台检查：`GOPROXY=off` I06 核心测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过。
+- N/A：I06 不包含 CLI 新命令、公开 Schema、项目 packageManager 评估、联网版本查询、安装、删除、alias 修改、全局包升级或任何系统修改。
+- 结论：I06 本地客观验收完成；等待 feature 提交的远程 CI，通过前不开始 I07。

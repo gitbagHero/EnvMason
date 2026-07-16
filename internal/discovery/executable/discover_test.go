@@ -262,6 +262,9 @@ func TestDiscoverResolvesSymlinkBeforeArchitectureInspection(t *testing.T) {
 	if result.Candidates[0].AccessPath() != target {
 		t.Fatalf("access path = %q, want %q", result.Candidates[0].AccessPath(), target)
 	}
+	if result.Candidates[0].InvocationPath() != link {
+		t.Fatalf("invocation path = %q, want %q", result.Candidates[0].InvocationPath(), link)
+	}
 }
 
 func TestDiscoverResolvesSymlinkedPATHDirectory(t *testing.T) {
