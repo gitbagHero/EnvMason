@@ -167,7 +167,7 @@
 
 - 增量：I03 macOS 系统只读探测
 - 开始日期：2026-07-15
-- 客观检查状态：本地通过（2026-07-15）；远程 CI 待分支推送后验证
+- 客观检查状态：本地与远程 CI 均通过（2026-07-16）
 - 维护者最终验收：Accepted（2026-07-16）
 - 真机检查：macOS 15.7.4（Build 24G517）Apple Silicon 设备正确识别系统架构 `arm64`、进程架构 `arm64` 和转译状态 `native`。
 - 功能检查：fixture 覆盖原生 Apple Silicon、Rosetta、Intel、非 macOS 拒绝和命令失败降级；PATH 顺序、重复、存在、缺失、相对路径和空条目均有断言。
@@ -177,6 +177,7 @@
 - Schema 检查：`0.2.0` 合法 fixture、公开示例和真机结果通过；缺少新增必填字段被拒绝；`0.1.0` fixture 继续通过原版本 Schema 校验。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./cmd/envmason`、gofmt 和 `git diff --check` 均通过。
 - 离线与跨平台检查：`GOPROXY=off` 核心测试通过；macOS 探测测试包面向 Linux amd64 和 Windows amd64 交叉编译通过。
+- 远程检查：[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29480948709) 通过。
 - 手动验收：维护者确认 I03 手动检测通过（2026-07-16）。
 - N/A：I03 不包含 CLI 新命令、Homebrew、语言运行时、网络查询、版本比较、建议、配置写入或系统修改。
-- 结论：I03 已完成并被接受；待提交到 `main` 且远程 CI 通过后，I04 具备顺序依赖条件。
+- 结论：I03 已完成并被接受，已经提交到 `main` 且远程 CI 通过；I04 已具备顺序依赖条件，但尚未开始。
