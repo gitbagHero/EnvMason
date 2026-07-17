@@ -165,6 +165,23 @@
 - 决定：扫描范围固定为系统、PATH、Homebrew、Node.js/NVM/npm/Corepack/pnpm/Yarn、Java/JDK/jenv/Maven/Gradle；扫描时间、范围、失败项和来源均进入报告。输出仅写 stdout，保存由 Shell 重定向完成。
 - 决定：I08 仅编排 I03～I07 的只读能力，不联网查询最新版或 EOL，不比较版本，不生成更新建议，不修改配置或系统；版本规范化与比较仍属于 I09。
 
+### D-019：I09～I10 一小时安全微批次
+
+- 状态：Accepted（维护者于 2026-07-17 明确确认）
+- 决定：本批次仅串行推进 I09～I10，作为 D-014 每批 3～5 个增量的一次时间盒例外；任何增量未通过本地门禁和远程 CI 时不得进入下一增量，达到一小时时保留当前安全进度并暂停，绝不进入 I11。
+- 决定：I10 默认本地报告不联网，只有维护者确认的 `envmason report --online` 显式入口可以访问远程只读数据源。
+- 决定：I10 不允许默认或在线报告写入磁盘；只建立可注入缓存契约、fresh/stale/corrupt 策略和已有缓存的只读行为，生产持久化缓存写入延后到具备 Plan 的后续增量。
+- 决定：Node 使用 Node.js 官方 release index 与 Release 工作组 schedule；Java 使用 Adoptium available releases，Temurin 生命周期只适用于能确认属于 Temurin 的数据，其他厂商 EOL 保守为 Unknown。
+- 决定：发布索引 TTL 为 6 小时，生命周期 TTL 为 24 小时；来源并发查询且单来源 5 秒超时、2 MiB 响应上限。过期数据必须标 stale，不能表达为“已确认最新”。
+
+### D-020：I09 通用版本规范化与比较
+
+- 状态：Accepted
+- 决定：I09 建立独立确定性核心，不新增 CLI、网络请求或公开 Schema；输出保留原始值、规范化值、scheme 和显式 Comparable 状态。
+- 决定：SemVer 遵循 2.0.0 优先级规则并接受 Node 常见小写 `v` 前缀；build metadata 不影响比较，非法前导零和不完整版本返回 Unknown。
+- 决定：Java 支持现代数值版本、`1.8.0_361`、`8u361`、`-ea`、build number 及受限厂商/支持标签；Java GA 的厂商 build 不用于跨厂商更新排序，EA build 可用于同一 EA line 排序。
+- 决定：跨 scheme、非法、歧义或超长输入一律返回 Unknown，不进行字符串兜底排序；I09 不解析 npm/Maven 范围，也不生成升级或清理结论。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -342,3 +359,19 @@
 - CI 检查：[I08 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29550292286)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29550372566)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I08 不包含远程最新版、EOL、版本比较、建议、Plan、安装、升级、卸载、配置写入或任何系统修改。
 - 结论：I08 已依据维护者预授权完成验收并合入 `main`；I04～I08 批次及 macOS 首个只读预览里程碑完成，I09 尚未开始。
+
+## I09 验收记录
+
+- 增量：I09 通用版本规范化与比较
+- 开始日期：2026-07-17
+- 客观检查状态：本地门禁通过，远程 CI 待运行
+- 维护者最终验收：Pending（等待远程 CI）
+- 接口检查：新增独立 `internal/version` 确定性核心，解析结果保留 Raw、Normalized、Scheme 和 Comparable；非法输入、跨 scheme 或缺失内部解析状态均返回 Unknown。
+- SemVer/Node 检查：覆盖 SemVer 2.0.0 核心版本、预发布优先级、build metadata、小写 `v` 前缀、任意长度数值及非法前导零；build metadata 不影响比较。
+- Java 检查：覆盖现代数值版本、`1.8.0_361`、`8u361`、EA、build number 和受限厂商/支持标签；传统 Java 8 表达归一到同一比较线，GA 厂商 build 不参与跨厂商更新排序。
+- 比较性质检查：表驱动测试验证等价、边界值、反对称性和传递性；模糊测试验证任意输入不会 panic，成功解析值自反且交换参数后关系反转。
+- 保守失败检查：空白、不完整、歧义、超长、未知标签和非法分隔符输入均不可比较，不进行字符串兜底排序，也不产生升级或清理结论。
+- 自动检查：`go test -count=1 ./internal/version`、`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
+- 离线与跨平台检查：`GOPROXY=off go test -count=1 ./internal/version` 通过；全部包面向 Linux amd64 和 Windows amd64 编译检查通过。
+- N/A：I09 不新增 CLI、公开 Schema、网络访问、建议、Plan、缓存、安装、升级、卸载、配置写入或系统修改。
+- 结论：I09 本地客观验收已通过；远程 CI 成功前保持 Pending，且不得开始 I10。
