@@ -44,6 +44,12 @@ func DecodePolicy(data []byte) (Policy, error) {
 	if err := ensureJSONEOF(decoder); err != nil {
 		return Policy{}, err
 	}
+	return ResolvePolicy(policy)
+}
+
+// ResolvePolicy validates a policy and fills deterministic defaults before it
+// is evaluated or included in a Plan digest.
+func ResolvePolicy(policy Policy) (Policy, error) {
 	if err := ValidatePolicy(policy); err != nil {
 		return Policy{}, err
 	}

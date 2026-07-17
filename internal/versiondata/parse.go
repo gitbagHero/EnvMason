@@ -47,6 +47,7 @@ func parseNodeReleases(body []byte, freshness Freshness, data *NodeData) {
 		if !candidate.Comparable {
 			continue
 		}
+		data.AvailableVersions = append(data.AvailableVersions, release.Version)
 		if !stable.Comparable || versioncore.Compare(candidate, stable) == versioncore.RelationGreater {
 			stable = candidate
 			data.LatestStable = release.Version
@@ -55,6 +56,12 @@ func parseNodeReleases(body []byte, freshness Freshness, data *NodeData) {
 			lts = candidate
 			data.LatestLTS = release.Version
 		}
+	}
+	sort.Slice(data.AvailableVersions, func(i, j int) bool {
+		return versioncore.Compare(versioncore.ParseSemVer(data.AvailableVersions[i]), versioncore.ParseSemVer(data.AvailableVersions[j])) == versioncore.RelationLess
+	})
+	if len(data.AvailableVersions) > 0 {
+		data.ReleaseIndexFreshness = freshness
 	}
 	if data.LatestStable != "" {
 		data.LatestStableFreshness = freshness

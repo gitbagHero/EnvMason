@@ -45,6 +45,24 @@ func TestNodeDecisionTable(t *testing.T) {
 	}
 }
 
+func TestNodeUpdateCandidateIsStructuredAndConservative(t *testing.T) {
+	t.Parallel()
+	input := fixtureInput("v22.0.0")
+	candidate, ok := NodeUpdateCandidate(input)
+	if !ok || candidate.ToolID != "runtime.node" || candidate.TargetVersion != "v24.2.0" || !candidate.EvidenceIsFresh {
+		t.Fatalf("candidate = %#v, %t", candidate, ok)
+	}
+	input.Policy.Tools["runtime.node"] = ToolPolicy{Channel: ChannelLTS, IgnoreUpdates: true}
+	if _, ok := NodeUpdateCandidate(input); ok {
+		t.Fatal("ignored update produced a candidate")
+	}
+	input.Policy.Tools["runtime.node"] = ToolPolicy{Channel: ChannelLTS}
+	input.Versions.Node.LatestLTSFreshness = versiondata.FreshnessStale
+	if _, ok := NodeUpdateCandidate(input); ok {
+		t.Fatal("stale data produced a candidate")
+	}
+}
+
 func TestProjectMajorReferenceAlwaysProducesRetainAndNeverDeleteAdvice(t *testing.T) {
 	t.Parallel()
 	input := fixtureInput("v22.22.0")

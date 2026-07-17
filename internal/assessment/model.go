@@ -45,3 +45,17 @@ type Input struct {
 	Policy      Policy
 	JavaVendors map[string]string
 }
+
+// UpdateCandidate is a structured, deterministic recommendation suitable for
+// a later Plan builder. It contains no command or executable callback.
+type UpdateCandidate struct {
+	ToolID          string
+	InstallationID  string
+	CurrentVersion  string
+	TargetVersion   string
+	CurrentManager  string
+	TargetSource    string
+	PolicyChannel   Channel
+	ExplicitPin     bool
+	EvidenceIsFresh bool
+}

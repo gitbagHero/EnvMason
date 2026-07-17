@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gitbagHero/EnvMason/internal/buildinfo"
+	planpkg "github.com/gitbagHero/EnvMason/internal/plan"
 	"github.com/gitbagHero/EnvMason/internal/report"
 )
 
@@ -39,7 +40,7 @@ func TestHelpEntryPoints(t *testing.T) {
 			if stderr != "" {
 				t.Fatalf("stderr = %q, want empty", stderr)
 			}
-			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report"} {
+			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan"} {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("stdout does not contain %q:\n%s", want, stdout)
 				}
@@ -51,6 +52,57 @@ func TestHelpEntryPoints(t *testing.T) {
 				t.Errorf("help exposes reserved -v shorthand:\n%s", stdout)
 			}
 		})
+	}
+}
+
+func TestPlanCommandPassesOnlyConfirmedPreviewOptions(t *testing.T) {
+	var received planpkg.Options
+	code, stdout, stderr := executeForTestWithDependencies(
+		[]string{"plan", "--tool", "runtime.node", "--online", "--format", "json", "--project", "/workspace", "--exclude", "archived", "--policy", "/workspace/policy.json"},
+		commandDependencies{generateReport: report.Generate, generatePlan: func(_ context.Context, options planpkg.Options) ([]byte, error) {
+			received = options
+			return []byte("{\"executable\":false}\n"), nil
+		}},
+	)
+	if code != ExitSuccess || stdout != "{\"executable\":false}\n" || stderr != "" {
+		t.Fatalf("plan result = code %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if received.ToolID != "runtime.node" || received.Format != planpkg.FormatJSON || !received.Online || received.PolicyPath != "/workspace/policy.json" || len(received.Projects) != 1 || len(received.Excludes) != 1 {
+		t.Fatalf("plan options = %#v", received)
+	}
+}
+
+func TestPlanCommandRejectsUnsafeOrUnsupportedUsageBeforeGeneration(t *testing.T) {
+	called := 0
+	deps := commandDependencies{generateReport: report.Generate, generatePlan: func(context.Context, planpkg.Options) ([]byte, error) {
+		called++
+		return nil, errors.New("unexpected")
+	}}
+	for _, args := range [][]string{
+		{"plan", "--tool", "runtime.node"},
+		{"plan", "--tool", "runtime.java", "--online"},
+		{"plan", "--tool", "runtime.node", "--online", "--format", "markdown"},
+		{"plan", "--tool", "runtime.node", "--online", "--exclude", "archived"},
+	} {
+		code, stdout, stderr := executeForTestWithDependencies(args, deps)
+		if code != ExitUsage || stdout != "" || !strings.Contains(stderr, "for usage") {
+			t.Fatalf("unsafe usage %q = %d/%q/%q", args, code, stdout, stderr)
+		}
+	}
+	if called != 0 {
+		t.Fatalf("generator called %d times for invalid usage", called)
+	}
+}
+
+func TestPlanOperationalFailureUsesExitOne(t *testing.T) {
+	code, stdout, stderr := executeForTestWithDependencies([]string{"plan", "--tool", "runtime.node", "--online"}, commandDependencies{
+		generateReport: report.Generate,
+		generatePlan: func(context.Context, planpkg.Options) ([]byte, error) {
+			return nil, errors.New("no eligible recommendation")
+		},
+	})
+	if code != ExitFailure || stdout != "" || !strings.Contains(stderr, "no eligible recommendation") || strings.Contains(stderr, "for usage") {
+		t.Fatalf("operational plan error = %d/%q/%q", code, stdout, stderr)
 	}
 }
 
@@ -171,7 +223,7 @@ func TestUsageErrors(t *testing.T) {
 }
 
 func executeForTest(args []string) (int, string, string) {
-	return executeForTestWithDependencies(args, commandDependencies{generateReport: report.Generate})
+	return executeForTestWithDependencies(args, commandDependencies{generateReport: report.Generate, generatePlan: planpkg.Generate})
 }
 
 func executeForTestWithDependencies(args []string, deps commandDependencies) (int, string, string) {

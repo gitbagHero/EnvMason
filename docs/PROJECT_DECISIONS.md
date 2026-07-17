@@ -203,6 +203,16 @@
 - 决定：项目精确引用匹配既有安装时输出 `retain_required`，无论是否存在更新都不得建议删除；多来源、active/default 不一致以及 Maven/Gradle/Shell Java 不一致输出独立可解释冲突。
 - 决定：I12 全程只读，不生成 Plan，不执行命令，不修改策略或系统。I13 的 Plan 接口和 Schema 按本批次已确认契约在 I12 验收后实施；I14 的执行器和操作历史存储仍不属于本批次。
 
+### D-023：I13 不可执行 Plan/Action 契约
+
+- 状态：Accepted（依据维护者对 D-022 接口与 Schema 的明确确认）
+- 决定：公开 `envmason plan --tool runtime.node --online --format summary|json`；可复用显式 `--policy`、`--project` 与 `--exclude` 只读输入。I13 只接受 `runtime.node`，必须显式 `--online`，无合格建议返回操作失败而非生成空计划。
+- 决定：Plan Schema 首版为 `0.1.0`，固定 `executable=false`；Plan 包含内容派生 SHA-256 ID、UTC 创建时间、恰好 30 分钟的过期时间、环境/策略 digest、环境摘要和至少一个 Action。
+- 决定：首个 Action 只表达 NVM `install_version`，不携带 command、args、Shell 或可调用 executor；NVM 必须已存在，目标必须来自 fresh LTS/Stable 建议，显式 Pin 还必须在 fresh Node.js 官方 release index 中精确验证。
+- 决定：Node 安装属于 R2，要求计划级确认，不提权、不要求重启；Schema 显式表达下载量 Unknown、依赖、前置条件、验证及手动恢复说明。风险可以由后续平台策略上调但不能低于 R2。
+- 决定：Plan ID 根据除 ID 外的完整规范化内容计算；Action、风险、验证、恢复、环境、策略或时间变化后旧 ID 校验失败，必须产生新 Plan。I13 不保存 Plan，不接受确认，不提供 apply，不创建操作日志。
+- 决定：环境 digest 覆盖 Node 安装 ID、版本、路径、manager、active/default 状态及相关系统摘要；策略 digest 覆盖解析并补齐默认值后的 Policy。后续执行前必须重新验证，但执行器属于 I14 之后范围。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |

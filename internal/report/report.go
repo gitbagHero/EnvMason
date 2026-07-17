@@ -33,6 +33,14 @@ type Options struct {
 	PolicyPath string
 }
 
+// AssessmentResult retains the structured facts used by all read-only
+// consumers. CLI report rendering and Plan preview generation share it.
+type AssessmentResult struct {
+	Inventory inventory.Inventory
+	Versions  versiondata.Result
+	Policy    assessment.Policy
+}
+
 func ValidateOptions(options Options) error {
 	switch options.Format {
 	case "", FormatSummary, FormatMarkdown, FormatJSON:
@@ -94,11 +102,24 @@ func ParseSeverities(values []string) ([]inventory.FindingSeverity, error) {
 
 // Generate performs one read-only scan and renders the filtered result.
 func Generate(ctx context.Context, options Options) ([]byte, error) {
-	snapshot, err := scanWithContext(ctx, defaultScanDependencies())
+	result, err := Assess(ctx, options)
 	if err != nil {
 		return nil, err
 	}
-	return assemble(ctx, options, snapshot, versiondata.Collect)
+	return Render(result.Inventory, options)
+}
+
+// Assess performs the shared read-only discovery, optional project/online
+// collection, and deterministic assessment without rendering.
+func Assess(ctx context.Context, options Options) (AssessmentResult, error) {
+	if err := ValidateOptions(options); err != nil {
+		return AssessmentResult{}, err
+	}
+	snapshot, err := scanWithContext(ctx, defaultScanDependencies())
+	if err != nil {
+		return AssessmentResult{}, err
+	}
+	return assess(ctx, options, snapshot, versiondata.Collect)
 }
 
 func generate(ctx context.Context, options Options, scan func(context.Context) (inventory.Inventory, error), collect func(context.Context) versiondata.Result) ([]byte, error) {
@@ -112,14 +133,21 @@ func generate(ctx context.Context, options Options, scan func(context.Context) (
 	if err != nil {
 		return nil, err
 	}
-	return assemble(ctx, options, discoverySnapshot{inventory: value}, collect)
+	result, err := assess(ctx, options, discoverySnapshot{inventory: value}, collect)
+	if err != nil {
+		return nil, err
+	}
+	return Render(result.Inventory, options)
 }
 
-func assemble(ctx context.Context, options Options, snapshot discoverySnapshot, collect func(context.Context) versiondata.Result) ([]byte, error) {
+func assess(ctx context.Context, options Options, snapshot discoverySnapshot, collect func(context.Context) versiondata.Result) (AssessmentResult, error) {
+	if err := ValidateOptions(options); err != nil {
+		return AssessmentResult{}, err
+	}
 	value := snapshot.inventory
 	policy, err := assessment.LoadPolicy(options.PolicyPath)
 	if err != nil {
-		return nil, err
+		return AssessmentResult{}, err
 	}
 	versions := versiondata.Result{}
 	if options.Online {
@@ -133,7 +161,7 @@ func assemble(ctx context.Context, options Options, snapshot discoverySnapshot, 
 	}
 	value.Findings = append(value.Findings, assessment.Evaluate(assessment.Input{Inventory: value, Versions: versions, Projects: projects, Policy: policy, JavaVendors: snapshot.javaVendors})...)
 	normalizeInventory(&value)
-	return Render(value, options)
+	return AssessmentResult{Inventory: value, Versions: versions, Policy: policy}, nil
 }
 
 // Render filters and renders an already assembled inventory without rescanning.

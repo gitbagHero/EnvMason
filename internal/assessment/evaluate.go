@@ -34,6 +34,34 @@ func Evaluate(input Input) []inventory.Finding {
 	return findings
 }
 
+// NodeUpdateCandidate returns a candidate only when the installed version is
+// safely comparable and older than a fresh channel target or explicit Pin.
+// ignore_updates suppresses the candidate, and no command is ever produced.
+func NodeUpdateCandidate(input Input) (UpdateCandidate, bool) {
+	policy := input.Policy
+	if policy.SchemaVersion == "" {
+		policy = DefaultPolicy()
+	}
+	rule := policy.Tools["runtime.node"]
+	tool, ok := findTool(input.Inventory, "runtime.node")
+	if !ok || rule.IgnoreUpdates {
+		return UpdateCandidate{}, false
+	}
+	current, ok := effectiveInstallation(tool.Installations)
+	if !ok {
+		return UpdateCandidate{}, false
+	}
+	target, targetEvidence, available := nodeTarget(input.Versions.Node, rule)
+	if !available || version.Compare(version.ParseSemVer(current.Version), version.ParseSemVer(target)) != version.RelationLess {
+		return UpdateCandidate{}, false
+	}
+	return UpdateCandidate{
+		ToolID: "runtime.node", InstallationID: current.ID, CurrentVersion: current.Version,
+		TargetVersion: target, CurrentManager: current.Manager, TargetSource: strings.TrimPrefix(targetEvidence, "policy_"),
+		PolicyChannel: rule.Channel, ExplicitPin: rule.Pin != "", EvidenceIsFresh: rule.Pin == "",
+	}, true
+}
+
 func nodeAssessment(input Input, policy ToolPolicy) []inventory.Finding {
 	tool, ok := findTool(input.Inventory, "runtime.node")
 	if !ok || len(tool.Installations) == 0 {

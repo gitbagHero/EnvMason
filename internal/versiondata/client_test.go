@@ -28,6 +28,9 @@ func TestCollectsOfficialFormatsAndLifecycle(t *testing.T) {
 	if result.Node.LatestStable != "v26.1.0" || result.Node.LatestLTS != "v24.2.0" {
 		t.Fatalf("Node release data = %#v", result.Node)
 	}
+	if !result.Node.HasFreshRelease("24.2.0") || result.Node.HasFreshRelease("v99.0.0") || len(result.Node.AvailableVersions) != 2 {
+		t.Fatalf("Node available releases = %#v", result.Node.AvailableVersions)
+	}
 	if got := nodeState(result.Node.Lifecycle, 22); got != LifecycleEOL {
 		t.Fatalf("Node 22 lifecycle = %q", got)
 	}

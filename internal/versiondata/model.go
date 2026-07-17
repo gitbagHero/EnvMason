@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	versioncore "github.com/gitbagHero/EnvMason/internal/version"
 )
 
 type Freshness string
@@ -51,7 +53,28 @@ type NodeData struct {
 	LatestStableFreshness Freshness
 	LatestLTS             string
 	LatestLTSFreshness    Freshness
+	AvailableVersions     []string
+	ReleaseIndexFreshness Freshness
 	Lifecycle             []NodeLifecycle
+}
+
+// HasFreshRelease verifies an exact Node.js version against the fresh official
+// release index. It is used by Plan previews for explicit Pin targets.
+func (data NodeData) HasFreshRelease(raw string) bool {
+	if data.ReleaseIndexFreshness != FreshnessFresh {
+		return false
+	}
+	target := versioncore.ParseSemVer(raw)
+	if !target.Comparable {
+		return false
+	}
+	for _, available := range data.AvailableVersions {
+		candidate := versioncore.ParseSemVer(available)
+		if candidate.Comparable && target.Normalized == candidate.Normalized {
+			return true
+		}
+	}
+	return false
 }
 
 type JavaLifecycle struct {
