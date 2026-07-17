@@ -23,7 +23,7 @@ func TestCurrentSchemaIdentity(t *testing.T) {
 	if document.ID != ID {
 		t.Fatalf("$id = %q, want %q", document.ID, ID)
 	}
-	if Version != "0.2.0" {
+	if Version != "0.3.0" {
 		t.Fatalf("Version = %q", Version)
 	}
 }
@@ -46,6 +46,20 @@ func TestLegacySchemaRemainsAvailable(t *testing.T) {
 	}
 	if document.ID != LegacyID {
 		t.Fatalf("legacy $id = %q, want %q", document.ID, LegacyID)
+	}
+}
+
+func TestPreviousSchemaRemainsAvailable(t *testing.T) {
+	t.Parallel()
+	data, id, ok := ByVersion(PreviousVersion)
+	if !ok || id != PreviousID {
+		t.Fatalf("previous schema = %q, %t", id, ok)
+	}
+	var document struct {
+		ID string `json:"$id"`
+	}
+	if err := json.Unmarshal(data, &document); err != nil || document.ID != PreviousID {
+		t.Fatalf("previous schema document = %#v, %v", document, err)
 	}
 }
 

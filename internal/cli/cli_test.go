@@ -57,7 +57,7 @@ func TestHelpEntryPoints(t *testing.T) {
 func TestReportCommandPassesConfirmedOptions(t *testing.T) {
 	var received report.Options
 	code, stdout, stderr := executeForTestWithDependencies(
-		[]string{"report", "--format", "markdown", "--category", "runtime", "--category", "ecosystem", "--severity", "warning", "--online", "--project", "/workspace", "--exclude", "archived"},
+		[]string{"report", "--format", "markdown", "--category", "runtime", "--category", "ecosystem", "--severity", "warning", "--online", "--project", "/workspace", "--exclude", "archived", "--policy", "/workspace/policy.json"},
 		commandDependencies{generateReport: func(_ context.Context, options report.Options) ([]byte, error) {
 			received = options
 			return []byte("# report\n"), nil
@@ -80,6 +80,9 @@ func TestReportCommandPassesConfirmedOptions(t *testing.T) {
 	}
 	if len(received.Projects) != 1 || received.Projects[0] != "/workspace" || len(received.Excludes) != 1 || received.Excludes[0] != "archived" {
 		t.Fatalf("project options = %#v / %#v", received.Projects, received.Excludes)
+	}
+	if received.PolicyPath != "/workspace/policy.json" {
+		t.Fatalf("policy path = %q", received.PolicyPath)
 	}
 }
 

@@ -3,8 +3,9 @@ package inventory
 import "time"
 
 const (
-	SchemaVersion       = "0.2.0"
-	LegacySchemaVersion = "0.1.0"
+	SchemaVersion         = "0.3.0"
+	PreviousSchemaVersion = "0.2.0"
+	LegacySchemaVersion   = "0.1.0"
 )
 
 type Architecture string
@@ -96,6 +97,18 @@ const (
 	SeverityError   FindingSeverity = "error"
 )
 
+type FindingStatus string
+
+const (
+	StatusRecommended     FindingStatus = "recommended"
+	StatusUpdateAvailable FindingStatus = "update_available"
+	StatusRetainRequired  FindingStatus = "retain_required"
+	StatusEOL             FindingStatus = "eol"
+	StatusConflict        FindingStatus = "conflict"
+	StatusUnknown         FindingStatus = "unknown"
+	StatusIgnored         FindingStatus = "ignored"
+)
+
 type TranslationState string
 
 const (
@@ -170,9 +183,12 @@ type Finding struct {
 	ID             string           `json:"id"`
 	Code           string           `json:"code"`
 	Severity       FindingSeverity  `json:"severity"`
+	Status         FindingStatus    `json:"status,omitempty"`
 	Message        string           `json:"message"`
 	Evidence       []string         `json:"evidence"`
 	Confidence     Confidence       `json:"confidence"`
+	Recommendation string           `json:"recommendation,omitempty"`
+	Impact         []string         `json:"impact,omitempty"`
 	ToolID         string           `json:"tool_id,omitempty"`
 	InstallationID string           `json:"installation_id,omitempty"`
 	Sources        []SourceMetadata `json:"sources"`

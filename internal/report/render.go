@@ -39,12 +39,25 @@ func renderSummary(value inventory.Inventory) []byte {
 	}
 	for _, finding := range value.Findings {
 		fmt.Fprintf(&output, "  %s %s: %s\n", strings.ToUpper(string(finding.Severity)), plainCell(finding.Code), plainCell(finding.Message))
+		if finding.Status != "" {
+			fmt.Fprintf(&output, "    status: %s\n", finding.Status)
+		}
 		if len(finding.Evidence) > 0 {
 			evidence := make([]string, len(finding.Evidence))
 			for index, item := range finding.Evidence {
 				evidence[index] = plainCell(item)
 			}
 			fmt.Fprintf(&output, "    evidence: %s\n", strings.Join(evidence, "; "))
+		}
+		if finding.Recommendation != "" {
+			fmt.Fprintf(&output, "    recommendation: %s\n", plainCell(finding.Recommendation))
+		}
+		if len(finding.Impact) > 0 {
+			impact := make([]string, len(finding.Impact))
+			for index, item := range finding.Impact {
+				impact[index] = plainCell(item)
+			}
+			fmt.Fprintf(&output, "    impact: %s\n", strings.Join(impact, "; "))
 		}
 	}
 	remoteSources := collectRemoteSources(value)
@@ -109,13 +122,13 @@ func renderMarkdown(value inventory.Inventory) []byte {
 
 	fmt.Fprintln(&output, "\n## Findings")
 	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "| Severity | Code | Message | Evidence |")
-	fmt.Fprintln(&output, "| --- | --- | --- | --- |")
+	fmt.Fprintln(&output, "| Severity | Status | Code | Message | Evidence | Recommendation | Impact |")
+	fmt.Fprintln(&output, "| --- | --- | --- | --- | --- | --- | --- |")
 	for _, finding := range value.Findings {
-		fmt.Fprintf(&output, "| %s | `%s` | %s | %s |\n", finding.Severity, markdownCell(finding.Code), markdownCell(finding.Message), markdownCell(strings.Join(finding.Evidence, "; ")))
+		fmt.Fprintf(&output, "| %s | %s | `%s` | %s | %s | %s | %s |\n", finding.Severity, finding.Status, markdownCell(finding.Code), markdownCell(finding.Message), markdownCell(strings.Join(finding.Evidence, "; ")), markdownCell(finding.Recommendation), markdownCell(strings.Join(finding.Impact, "; ")))
 	}
 	if len(value.Findings) == 0 {
-		fmt.Fprintln(&output, "| — | — | No findings. | — |")
+		fmt.Fprintln(&output, "| — | — | — | No findings. | — | — | — |")
 	}
 
 	fmt.Fprintln(&output, "\n## Data Sources")

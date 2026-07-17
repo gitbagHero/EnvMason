@@ -192,6 +192,17 @@
 - 决定：固定忽略版本库内部目录、依赖目录和常见构建产物，不跟随目录或文件符号链接；用户排除按每个根目录内精确相对子树处理。目录深度、目录数、文件数和单文件大小均有确定上限，超限或部分失败显式降级。
 - 决定：建立内部 Project→Runtime→Constraint→Source 关系；I11 通过现有 Finding 表达引用和冲突，不升级 Inventory Schema。只报告精确版本不等价或简单 Node 范围与精确版本确定不相容的冲突；动态、复杂或无法解析的声明为 Unknown，不回显未知原文。
 
+### D-022：I12～I13 两小时只读评估与 Plan 预览批次
+
+- 状态：Accepted（维护者于 2026-07-17 明确确认）
+- 决定：本批次仅串行实施 I12～I13，作为 D-014 每批 3～5 个增量的两小时时间盒例外；I12 的本地门禁和远程 CI 未通过前不得进入 I13，达到时间盒时保留安全进度并暂停，绝不进入 I14。
+- 决定：I12 的规则核心直接消费结构化 Inventory、VersionData、ProjectReference、显式 Policy 和扫描期保留的 Java vendor，不从自然语言 message 反向推断版本；每项建议必须给出 status、evidence、confidence、recommendation 和 impact。
+- 决定：Inventory Schema 升级到 `0.3.0`，Finding 新增可选的 `status`、`recommendation` 和 `impact`；继续原样保留并支持验证 `0.2.0` 与 `0.1.0`，不修改历史 Schema 文件。
+- 决定：公开 `report --policy <file>`，仅显式读取版本化严格 JSON，不自动发现默认配置；文件上限 64 KiB，未知字段、工具、通道和非法 Pin 被拒绝。首批工具仅为 `runtime.node` 与 `runtime.java`，通道仅为 `lts`/`stable`。
+- 决定：`ignore_updates` 只抑制普通更新建议，不隐藏 EOL、项目保留或冲突；只有 fresh 官方数据或用户明确 Pin 可以产生确定更新比较，stale/unavailable/不可比较数据必须输出 Unknown。Temurin 生命周期只应用于扫描期能确认 vendor 的 JDK。
+- 决定：项目精确引用匹配既有安装时输出 `retain_required`，无论是否存在更新都不得建议删除；多来源、active/default 不一致以及 Maven/Gradle/Shell Java 不一致输出独立可解释冲突。
+- 决定：I12 全程只读，不生成 Plan，不执行命令，不修改策略或系统。I13 的 Plan 接口和 Schema 按本批次已确认契约在 I12 验收后实施；I14 的执行器和操作历史存储仍不属于本批次。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |

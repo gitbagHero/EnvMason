@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gitbagHero/EnvMason/internal/assessment"
 	"github.com/gitbagHero/EnvMason/internal/inventory"
 	"github.com/gitbagHero/EnvMason/internal/projectscan"
 	"github.com/gitbagHero/EnvMason/internal/versiondata"
@@ -29,6 +30,7 @@ type Options struct {
 	Online     bool
 	Projects   []string
 	Excludes   []string
+	PolicyPath string
 }
 
 func ValidateOptions(options Options) error {
@@ -60,6 +62,9 @@ func ValidateOptions(options Options) error {
 			return errors.New("project exclusion must not be empty")
 		}
 	}
+	if options.PolicyPath != "" && strings.TrimSpace(options.PolicyPath) == "" {
+		return errors.New("policy path must not be empty")
+	}
 	return nil
 }
 
@@ -89,7 +94,11 @@ func ParseSeverities(values []string) ([]inventory.FindingSeverity, error) {
 
 // Generate performs one read-only scan and renders the filtered result.
 func Generate(ctx context.Context, options Options) ([]byte, error) {
-	return generate(ctx, options, Scan, versiondata.Collect)
+	snapshot, err := scanWithContext(ctx, defaultScanDependencies())
+	if err != nil {
+		return nil, err
+	}
+	return assemble(ctx, options, snapshot, versiondata.Collect)
 }
 
 func generate(ctx context.Context, options Options, scan func(context.Context) (inventory.Inventory, error), collect func(context.Context) versiondata.Result) ([]byte, error) {
@@ -103,12 +112,27 @@ func generate(ctx context.Context, options Options, scan func(context.Context) (
 	if err != nil {
 		return nil, err
 	}
+	return assemble(ctx, options, discoverySnapshot{inventory: value}, collect)
+}
+
+func assemble(ctx context.Context, options Options, snapshot discoverySnapshot, collect func(context.Context) versiondata.Result) ([]byte, error) {
+	value := snapshot.inventory
+	policy, err := assessment.LoadPolicy(options.PolicyPath)
+	if err != nil {
+		return nil, err
+	}
+	versions := versiondata.Result{}
 	if options.Online {
-		appendVersionData(&value, collect(ctx))
+		versions = collect(ctx)
+		appendVersionData(&value, versions)
 	}
+	projects := projectscan.Result{CollectedAt: value.GeneratedAt}
 	if len(options.Projects) > 0 {
-		appendProjectData(&value, projectscan.Scan(ctx, projectscan.Request{Roots: options.Projects, Excludes: options.Excludes, CollectedAt: value.GeneratedAt}))
+		projects = projectscan.Scan(ctx, projectscan.Request{Roots: options.Projects, Excludes: options.Excludes, CollectedAt: value.GeneratedAt})
+		appendProjectData(&value, projects)
 	}
+	value.Findings = append(value.Findings, assessment.Evaluate(assessment.Input{Inventory: value, Versions: versions, Projects: projects, Policy: policy, JavaVendors: snapshot.javaVendors})...)
+	normalizeInventory(&value)
 	return Render(value, options)
 }
 

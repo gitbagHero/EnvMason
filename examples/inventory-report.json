@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "generated_at": "2026-07-15T00:00:00Z",
   "system": {
     "os": "macos",
@@ -89,12 +89,17 @@
       "id": "finding-node-multiple",
       "code": "MULTIPLE_INSTALLATIONS",
       "severity": "warning",
+      "status": "conflict",
       "message": "Node.js has multiple known installations.",
       "evidence": [
         "node-nvm-22",
         "node-homebrew-24"
       ],
       "confidence": "high",
+      "recommendation": "Review the intended active and default installation before changing Node.js.",
+      "impact": [
+        "Changing the default may affect projects and shells."
+      ],
       "tool_id": "runtime.node",
       "sources": [
         {

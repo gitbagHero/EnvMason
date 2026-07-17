@@ -2,6 +2,8 @@ package report
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +31,60 @@ func TestGenerateOnlyCollectsRemoteDataWhenExplicit(t *testing.T) {
 	}
 	if collected != 1 || !strings.Contains(string(data), "REMOTE_NODE_VERSION_DATA") || !strings.Contains(string(data), "node.example/index.json") || !strings.Contains(string(data), "2026-07-17") {
 		t.Fatalf("online report = collected %d\n%s", collected, data)
+	}
+}
+
+func TestGenerateAppliesExplicitPolicyAndEmitsStructuredAssessment(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "policy.json")
+	data := []byte(`{"schema_version":"0.1.0","tools":{"runtime.node":{"channel":"stable","ignore_updates":true}}}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := generate(context.Background(), Options{Format: FormatJSON, Online: true, PolicyPath: path}, func(context.Context) (inventory.Inventory, error) {
+		value := reportFixture()
+		value.Tools[0].Installations[0].Version = "v24.2.0"
+		value.Tools[0].Installations[0].NormalizedVersion = "24.2.0"
+		return value, nil
+	}, func(context.Context) versiondata.Result { return onlineFixture() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("read-only policy input was modified")
+	}
+	text := string(output)
+	for _, expected := range []string{`"schema_version": "0.3.0"`, `"code": "NODE_UPDATE_IGNORED"`, `"status": "ignored"`, `"recommendation":`, `"impact":`} {
+		if !strings.Contains(text, expected) {
+			t.Errorf("assessment JSON missing %s:\n%s", expected, text)
+		}
+	}
+}
+
+func TestGenerateRejectsInvalidPolicyWithoutCollectingOnlineData(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "policy.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":"0.1.0","tools":{},"extra":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	collected := false
+	_, err := generate(context.Background(), Options{Format: FormatJSON, Online: true, PolicyPath: path}, func(context.Context) (inventory.Inventory, error) {
+		return reportFixture(), nil
+	}, func(context.Context) versiondata.Result {
+		collected = true
+		return onlineFixture()
+	})
+	if err == nil || collected {
+		t.Fatalf("invalid policy error/collection = %v/%t", err, collected)
 	}
 }
 

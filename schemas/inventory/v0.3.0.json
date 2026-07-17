@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:envmason:schema:inventory:0.3.0",
+  "title": "EnvMason Inventory 0.3.0",
+  "description": "Normalized, source-backed inventory with structured assessment findings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "system",
+    "tools",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.3.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "system": {
+      "$ref": "urn:envmason:schema:inventory:0.2.0#/$defs/system"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:envmason:schema:inventory:0.2.0#/$defs/tool"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "severity",
+        "message",
+        "evidence",
+        "confidence",
+        "sources"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "error"]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "recommended",
+            "update_available",
+            "retain_required",
+            "eol",
+            "conflict",
+            "unknown",
+            "ignored"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "confidence": {
+          "$ref": "urn:envmason:schema:inventory:0.2.0#/$defs/confidence"
+        },
+        "recommendation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "impact": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tool_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "urn:envmason:schema:inventory:0.2.0#/$defs/source_metadata"
+          }
+        }
+      }
+    }
+  }
+}

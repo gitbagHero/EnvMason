@@ -98,6 +98,19 @@ func schemaForVersion(version string) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	compiler.AssertFormat()
+	if version == SchemaVersion {
+		previous, previousID, ok := inventoryschema.ByVersion(PreviousSchemaVersion)
+		if !ok {
+			return nil, fmt.Errorf("load previous inventory schema %q", PreviousSchemaVersion)
+		}
+		previousDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(previous))
+		if err != nil {
+			return nil, fmt.Errorf("parse previous embedded schema: %w", err)
+		}
+		if err := compiler.AddResource(previousID, previousDocument); err != nil {
+			return nil, fmt.Errorf("add previous embedded schema: %w", err)
+		}
+	}
 	if err := compiler.AddResource(id, document); err != nil {
 		return nil, fmt.Errorf("add embedded schema: %w", err)
 	}

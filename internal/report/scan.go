@@ -28,22 +28,36 @@ type scanDependencies struct {
 	javaDiscover     func(context.Context, java.Request) (java.Result, error)
 }
 
-// Scan assembles one macOS inventory from the read-only discovery adapters.
-func Scan(ctx context.Context) (inventory.Inventory, error) {
-	return scan(ctx, scanDependencies{
+type discoverySnapshot struct {
+	inventory   inventory.Inventory
+	javaVendors map[string]string
+}
+
+func defaultScanDependencies() scanDependencies {
+	return scanDependencies{
 		goos: runtime.GOOS, now: time.Now, getwd: os.Getwd, lookupEnv: os.LookupEnv,
 		macosDiscover: macos.Discover, homebrewDiscover: homebrew.Discover,
 		nodeDiscover: nodejs.Discover, javaDiscover: java.Discover,
-	})
+	}
+}
+
+// Scan assembles one macOS inventory from the read-only discovery adapters.
+func Scan(ctx context.Context) (inventory.Inventory, error) {
+	return scan(ctx, defaultScanDependencies())
 }
 
 func scan(ctx context.Context, deps scanDependencies) (inventory.Inventory, error) {
+	snapshot, err := scanWithContext(ctx, deps)
+	return snapshot.inventory, err
+}
+
+func scanWithContext(ctx context.Context, deps scanDependencies) (discoverySnapshot, error) {
 	if deps.goos != "darwin" {
-		return inventory.Inventory{}, fmt.Errorf("macOS report is unsupported on %s", deps.goos)
+		return discoverySnapshot{}, fmt.Errorf("macOS report is unsupported on %s", deps.goos)
 	}
 	workingDirectory, err := deps.getwd()
 	if err != nil {
-		return inventory.Inventory{}, fmt.Errorf("determine working directory: %w", err)
+		return discoverySnapshot{}, fmt.Errorf("determine working directory: %w", err)
 	}
 	collectedAt := deps.now().UTC()
 	pathDirectories := filepath.SplitList(environment(deps.lookupEnv, "PATH"))
@@ -130,7 +144,15 @@ func scan(ctx context.Context, deps scanDependencies) (inventory.Inventory, erro
 		})
 	}
 	normalizeInventory(&value)
-	return value, nil
+	vendors := make(map[string]string, len(javaResult.JDKs))
+	if javaErr == nil {
+		for _, jdk := range javaResult.JDKs {
+			if jdk.ID != "" && jdk.Vendor != "" {
+				vendors[jdk.ID] = jdk.Vendor
+			}
+		}
+	}
+	return discoverySnapshot{inventory: value, javaVendors: vendors}, nil
 }
 
 func environment(lookup func(string) (string, bool), name string) string {
