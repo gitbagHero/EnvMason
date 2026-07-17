@@ -429,3 +429,20 @@
 - CI 检查：[I11 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29560937178)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29561069909)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I11 不执行项目脚本或构建工具，不修改项目配置，不生成升级、删除或清理建议，不新增公开 Schema，不包含 Plan 或系统修改。
 - 结论：I11 已依据维护者预授权完成验收并合入 `main`；I11 单增量一小时时间盒完成并按约定暂停，I12 尚未开始。
+
+## I12 验收记录
+
+- 增量：I12 首版建议与冲突规则
+- 开始与检查日期：2026-07-17
+- 客观检查状态：Passed
+- 维护者最终验收：Accepted（依据 D-014 与 D-022 维护者预授权，2026-07-17）
+- 规则检查：Node 决策表覆盖 LTS、Stable、Pin、推荐、可更新、通道不匹配、忽略和 Unknown；Current 不会被表达为 LTS，stale/unavailable 数据不会产生确定更新结论。
+- 保留检查：项目精确主版本引用可匹配已安装 patch 版本并输出 `retain_required`；建议文本不会产生删除、移除或卸载指令。
+- Java 检查：Temurin EOL 只应用于扫描期确认的 Eclipse Adoptium/Temurin vendor；未知 vendor 不产生确定 EOL。Maven、Gradle、JAVA_HOME 和 jenv 的运行时不一致会产生结构化冲突建议。
+- 策略检查：`--policy` 仅显式读取最大 64 KiB 的严格 JSON；未知字段、工具、通道、非法 Pin、尾随 JSON 和超大文件均被拒绝，读取前后文件大小与修改时间不变。`ignore_updates` 不隐藏 EOL、项目保留和冲突。
+- Schema 检查：Inventory `0.3.0` 的 `status`、`recommendation` 和 `impact` 可选字段通过 Draft 2020-12 校验；`0.2.0` 与 `0.1.0` 保持原文件和验证能力，公开示例与 golden 已更新。
+- 输出检查：summary、Markdown 和 JSON 均显示结构化评估语义；JSON 在输出前通过嵌入式 Schema 校验。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./cmd/envmason`、gofmt 和 `git diff --check` 均通过。
+- 远程检查：[I12 分支 CI #31](https://github.com/gitbagHero/EnvMason/actions/runs/29563334632) 与 [main CI #32](https://github.com/gitbagHero/EnvMason/actions/runs/29563470099) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
+- N/A：I12 不生成 Plan，不执行安装、升级、卸载、清理、默认切换、Shell、提权或系统写入。
+- 结论：I12 已依据维护者预授权完成验收并进入 `main`；I13 已具备顺序依赖条件，但尚未开始。
