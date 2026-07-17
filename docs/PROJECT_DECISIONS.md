@@ -213,6 +213,16 @@
 - 决定：Plan ID 根据除 ID 外的完整规范化内容计算；Action、风险、验证、恢复、环境、策略或时间变化后旧 ID 校验失败，必须产生新 Plan。I13 不保存 Plan，不接受确认，不提供 apply，不创建操作日志。
 - 决定：环境 digest 覆盖 Node 安装 ID、版本、路径、manager、active/default 状态及相关系统摘要；策略 digest 覆盖解析并补齐默认值后的 Policy。后续执行前必须重新验证，但执行器属于 I14 之后范围。
 
+### D-024：I14 受控执行、确认与本地操作记录契约
+
+- 状态：Accepted（维护者于 2026-07-17 明确确认推荐方案）
+- 决定：保留 I13 Plan Schema `0.1.0` 及其 `executable=false` 语义；新增 Plan Schema `0.2.0` 表达可执行的声明式 R1/R2 Plan。两个版本均不允许 command、args、Shell 或可执行路径字段，任何动作必须通过 `(tool_id, operation, adapter)` 命中确定性核心的内置注册表，且注册表最低风险只能上调、不能下调。
+- 决定：I14 不改变公开 `envmason plan` 命令，它继续输出 I13 的不可执行预览。I14 只提供内部受控执行核心和一个项目自带的无害 R1 `envmason version` 测试动作；测试动作仍要求绑定完整 Plan ID、确认时间和 `scope=plan` 的计划级确认，不开放 apply、任意命令或真实包管理器写操作。
+- 决定：执行器只使用绝对可执行路径和结构化参数直接启动进程，不解析 Shell 字符串；动作注册表固定提供参数、环境、工作目录、最长 30 秒超时、前置检查和验证器。stdout 与 stderr 分别最多保留 64 KiB，超限显式标记，敏感值和常见 Token/Password/Secret/Authorization 赋值在持久化前替换为 `[REDACTED]`。
+- 决定：Operation Record Schema 首版为 `0.1.0`；记录 Operation ID、Plan ID 与版本、确认凭据、动作身份与风险、已脱敏调用信息、前置检查、输出、退出码、标准化错误、验证和完整状态迁移。只有进程成功且注册验证器通过才能成为 Completed；遗留 Running/Verifying 记录只能恢复为 Interrupted，不能推断为成功。
+- 决定：I14 操作历史采用本地版本化 JSON，不引入 SQLite。每次状态更新先在同目录写入权限受限的临时文件并安全替换当前记录；macOS 使用 `~/Library/Application Support/EnvMason/operations`，Windows 使用 `%LOCALAPPDATA%/EnvMason/operations`，Linux 使用 `$XDG_STATE_HOME/envmason/operations` 或 `~/.local/state/envmason/operations`。Unix 目录/文件权限分别为 `0700`/`0600`，符号链接目的地被拒绝。
+- 决定：在 I18 前根据历史查询、并发、迁移和 GUI 需求重新评估 SQLite；I14 不提供删除历史的公开入口，后续删除或恢复仍必须遵循对应增量的 Plan 和确认语义。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -222,7 +232,6 @@
 | Ubuntu LTS 具体版本范围 | I31 前 |
 | 第三方适配器动态加载与隔离方案 | I51 |
 | Lock 跨平台组织和兼容规则 | I19–I20 |
-| 操作历史采用 JSON 或 SQLite 及迁移时点 | I14 |
 | 首个支持的 AI Agent | I36 前 |
 
 ## I00 验收记录

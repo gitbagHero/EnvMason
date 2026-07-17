@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:envmason:schema:plan:0.2.0",
+  "title": "EnvMason Plan 0.2.0",
+  "description": "An immutable EnvMason execution plan containing declarative actions only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "created_at",
+    "expires_at",
+    "executable",
+    "summary",
+    "environment_digest",
+    "policy_digest",
+    "environment",
+    "actions"
+  ],
+  "properties": {
+    "schema_version": { "const": "0.2.0" },
+    "id": { "$ref": "#/$defs/digest" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "executable": { "const": true },
+    "summary": { "type": "string", "minLength": 1 },
+    "environment_digest": { "$ref": "#/$defs/digest" },
+    "policy_digest": { "$ref": "#/$defs/digest" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/action" }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "os_version",
+        "architecture",
+        "tool_id",
+        "active_installation_id",
+        "active_version",
+        "active_manager",
+        "installations"
+      ],
+      "properties": {
+        "os": { "type": "string", "minLength": 1 },
+        "os_version": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "tool_id": { "$ref": "#/$defs/identifier" },
+        "active_installation_id": { "type": "string", "minLength": 1 },
+        "active_version": { "type": "string", "minLength": 1 },
+        "active_manager": { "$ref": "#/$defs/identifier" },
+        "installations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/installation" }
+        }
+      }
+    },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "path", "manager", "active_state", "default_state"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "manager": { "$ref": "#/$defs/identifier" },
+        "active_state": { "enum": ["active", "inactive", "unknown"] },
+        "default_state": { "enum": ["default", "non_default", "unknown"] }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tool_id",
+        "operation",
+        "adapter",
+        "target_version",
+        "risk",
+        "dependencies",
+        "confirmation",
+        "elevation_required",
+        "restart_required",
+        "download",
+        "preconditions",
+        "verifications",
+        "recovery"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "tool_id": { "$ref": "#/$defs/identifier" },
+        "operation": { "$ref": "#/$defs/identifier" },
+        "adapter": { "$ref": "#/$defs/identifier" },
+        "target_version": { "type": "string", "minLength": 1 },
+        "risk": { "enum": ["R1", "R2"] },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "confirmation": { "$ref": "#/$defs/confirmation" },
+        "elevation_required": { "const": false },
+        "restart_required": { "const": false },
+        "download": { "$ref": "#/$defs/download" },
+        "preconditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "verifications": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "recovery": { "$ref": "#/$defs/recovery" }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "scope"],
+      "properties": {
+        "required": { "const": true },
+        "scope": { "const": "plan" }
+      }
+    },
+    "download": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["known", "unknown"] },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "subject", "expected"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/identifier" },
+        "subject": { "type": "string", "minLength": 1 },
+        "expected": { "type": "string", "minLength": 1 }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "summary"],
+      "properties": {
+        "mode": { "const": "manual" },
+        "summary": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

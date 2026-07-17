@@ -1,12 +1,14 @@
-// Package plan defines and validates immutable, non-executable EnvMason Plan
-// previews. I13 deliberately contains no executor or arbitrary command field.
+// Package plan defines and validates immutable EnvMason Plans. Plans contain
+// declarative action identities only; executable paths and arguments belong to
+// the controlled execution registry.
 package plan
 
 import "time"
 
 const (
-	SchemaVersion = "0.1.0"
-	DefaultTTL    = 30 * time.Minute
+	SchemaVersion           = "0.1.0"
+	ExecutableSchemaVersion = "0.2.0"
+	DefaultTTL              = 30 * time.Minute
 )
 
 type Risk string

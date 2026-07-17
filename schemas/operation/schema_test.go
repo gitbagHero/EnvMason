@@ -1,4 +1,4 @@
-package planschema
+package operationschema
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ func TestCurrentSchemaIdentityAndCopy(t *testing.T) {
 	var document struct {
 		ID string `json:"$id"`
 	}
-	if err := json.Unmarshal(Current(), &document); err != nil || document.ID != ID || Version != "0.2.0" {
+	if err := json.Unmarshal(Current(), &document); err != nil || document.ID != ID || Version != "0.1.0" {
 		t.Fatalf("schema identity = %#v, %v", document, err)
 	}
 	first := Current()
@@ -21,9 +21,6 @@ func TestCurrentSchemaIdentityAndCopy(t *testing.T) {
 		t.Fatal("mutating returned schema changed embedded data")
 	}
 	if _, _, ok := ByVersion("9.9.9"); ok {
-		t.Fatal("unknown plan schema is available")
-	}
-	if previous, id, ok := ByVersion(PreviousVersion); !ok || id != PreviousID || len(previous) == 0 {
-		t.Fatal("previous plan schema is unavailable")
+		t.Fatal("unknown operation schema is available")
 	}
 }

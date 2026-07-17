@@ -11,9 +11,10 @@ import (
 
 var digestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
 
 func Validate(value Plan) error {
-	if value.SchemaVersion != SchemaVersion {
+	if value.SchemaVersion != SchemaVersion && value.SchemaVersion != ExecutableSchemaVersion {
 		return fmt.Errorf("validate plan: unsupported schema_version %q", value.SchemaVersion)
 	}
 	if !digestPattern.MatchString(value.ID) || !digestPattern.MatchString(value.EnvironmentDigest) || !digestPattern.MatchString(value.PolicyDigest) {
@@ -22,8 +23,11 @@ func Validate(value Plan) error {
 	if value.CreatedAt.IsZero() || value.ExpiresAt.Sub(value.CreatedAt) != DefaultTTL {
 		return fmt.Errorf("validate plan: expiration must be exactly %s after creation", DefaultTTL)
 	}
-	if value.Executable {
-		return errors.New("validate plan: I13 plans must be non-executable")
+	if value.SchemaVersion == SchemaVersion && value.Executable {
+		return errors.New("validate plan: Plan 0.1.0 must be non-executable")
+	}
+	if value.SchemaVersion == ExecutableSchemaVersion && !value.Executable {
+		return errors.New("validate plan: Plan 0.2.0 must be executable")
 	}
 	if strings.TrimSpace(value.Summary) == "" || len(value.Actions) == 0 {
 		return errors.New("validate plan: summary and actions are required")
@@ -41,7 +45,7 @@ func Validate(value Plan) error {
 			return fmt.Errorf("validate plan: duplicate action ID %q", action.ID)
 		}
 		actions[action.ID] = action
-		if err := validateAction(action); err != nil {
+		if err := validateAction(value.SchemaVersion, action); err != nil {
 			return fmt.Errorf("validate plan: action %q: %w", action.ID, err)
 		}
 	}
@@ -69,14 +73,14 @@ func Validate(value Plan) error {
 }
 
 func validateEnvironment(value EnvironmentSummary, digest string) error {
-	if value.OS == "" || value.OSVersion == "" || value.Architecture == "" || value.ToolID != "runtime.node" ||
-		value.ActiveInstallationID == "" || value.ActiveVersion == "" || value.ActiveManager == "" || len(value.Installations) == 0 {
+	if value.OS == "" || value.OSVersion == "" || value.Architecture == "" || !identifierPattern.MatchString(value.ToolID) ||
+		value.ActiveInstallationID == "" || value.ActiveVersion == "" || !identifierPattern.MatchString(value.ActiveManager) || len(value.Installations) == 0 {
 		return errors.New("validate plan: environment summary is incomplete")
 	}
 	seen := map[string]bool{}
 	activeMatches := 0
 	for _, item := range value.Installations {
-		if item.ID == "" || item.Version == "" || item.Path == "" || item.Manager == "" || item.ActiveState == "" || item.DefaultState == "" || seen[item.ID] {
+		if item.ID == "" || item.Version == "" || item.Path == "" || !identifierPattern.MatchString(item.Manager) || item.ActiveState == "" || item.DefaultState == "" || seen[item.ID] {
 			return errors.New("validate plan: environment installation is incomplete or duplicated")
 		}
 		if item.ActiveState != "active" && item.ActiveState != "inactive" && item.ActiveState != "unknown" ||
@@ -101,21 +105,32 @@ func validateEnvironment(value EnvironmentSummary, digest string) error {
 	return nil
 }
 
-func validateAction(action Action) error {
-	if !actionIDPattern.MatchString(action.ID) || action.ToolID != "runtime.node" || action.Operation != "install_version" || action.Adapter != "nvm" || !versioncore.ParseSemVer(action.TargetVersion).Comparable {
-		return errors.New("unsupported tool, operation, adapter or target")
+func validateAction(schemaVersion string, action Action) error {
+	if !actionIDPattern.MatchString(action.ID) {
+		return errors.New("invalid action ID")
+	}
+	if schemaVersion == SchemaVersion {
+		if action.ToolID != "runtime.node" || action.Operation != "install_version" || action.Adapter != "nvm" || !versioncore.ParseSemVer(action.TargetVersion).Comparable {
+			return errors.New("unsupported tool, operation, adapter or target")
+		}
+	} else if !identifierPattern.MatchString(action.ToolID) || !identifierPattern.MatchString(action.Operation) ||
+		!identifierPattern.MatchString(action.Adapter) || strings.TrimSpace(action.TargetVersion) == "" {
+		return errors.New("invalid declarative action identity or target")
 	}
 	if !validRisk(action.Risk) {
 		return fmt.Errorf("unknown risk %q", action.Risk)
 	}
-	if riskRank(action.Risk) < riskRank(RiskR2) {
+	if schemaVersion == SchemaVersion && riskRank(action.Risk) < riskRank(RiskR2) {
 		return errors.New("install_version risk cannot be lower than R2")
 	}
+	if schemaVersion == ExecutableSchemaVersion && action.Risk != RiskR1 && action.Risk != RiskR2 {
+		return errors.New("Plan 0.2.0 only permits R1 and R2 actions")
+	}
 	if !action.Confirmation.Required || action.Confirmation.Scope != "plan" {
-		return errors.New("R2 action requires plan-level confirmation")
+		return errors.New("R1/R2 action requires plan-level confirmation")
 	}
 	if action.ElevationRequired {
-		return errors.New("I13 preview cannot require elevation")
+		return errors.New("Plan 0.1.0/0.2.0 cannot require elevation")
 	}
 	if action.Download.State != "known" && action.Download.State != "unknown" {
 		return errors.New("download state is unknown")
@@ -140,7 +155,7 @@ func validateAction(action Action) error {
 		dependencies[dependency] = true
 	}
 	for _, check := range append(append([]Check{}, action.Preconditions...), action.Verifications...) {
-		if !validCheckKind(check.Kind) || check.Subject == "" || check.Expected == "" {
+		if !validCheckKind(schemaVersion, check.Kind) || check.Subject == "" || check.Expected == "" {
 			return errors.New("invalid check metadata")
 		}
 	}
@@ -171,7 +186,10 @@ func riskRank(value Risk) int {
 	}
 }
 
-func validCheckKind(value string) bool {
+func validCheckKind(schemaVersion, value string) bool {
+	if schemaVersion == ExecutableSchemaVersion {
+		return identifierPattern.MatchString(value)
+	}
 	switch value {
 	case "inventory_digest_matches", "policy_digest_matches", "manager_available", "current_version_matches", "target_version_allowed",
 		"version_installed", "existing_versions_retained", "active_version_unchanged":

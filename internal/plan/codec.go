@@ -12,10 +12,10 @@ import (
 	planschema "github.com/gitbagHero/EnvMason/schemas/plan"
 )
 
-var compiledSchema = struct {
+var compiledSchemas = struct {
 	sync.Mutex
-	value *jsonschema.Schema
-}{}
+	values map[string]*jsonschema.Schema
+}{values: make(map[string]*jsonschema.Schema)}
 
 func Marshal(value Plan) ([]byte, error) {
 	if err := Validate(value); err != nil {
@@ -58,10 +58,10 @@ func ValidateJSON(data []byte) error {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return fmt.Errorf("parse plan JSON: %w", err)
 	}
-	if envelope.SchemaVersion != SchemaVersion {
+	if envelope.SchemaVersion != SchemaVersion && envelope.SchemaVersion != ExecutableSchemaVersion {
 		return fmt.Errorf("validate plan JSON: unsupported schema_version %q", envelope.SchemaVersion)
 	}
-	schema, err := schemaForVersion()
+	schema, err := schemaForVersion(envelope.SchemaVersion)
 	if err != nil {
 		return fmt.Errorf("compile plan schema: %w", err)
 	}
@@ -75,15 +75,15 @@ func ValidateJSON(data []byte) error {
 	return nil
 }
 
-func schemaForVersion() (*jsonschema.Schema, error) {
-	compiledSchema.Lock()
-	defer compiledSchema.Unlock()
-	if compiledSchema.value != nil {
-		return compiledSchema.value, nil
+func schemaForVersion(version string) (*jsonschema.Schema, error) {
+	compiledSchemas.Lock()
+	defer compiledSchemas.Unlock()
+	if schema := compiledSchemas.values[version]; schema != nil {
+		return schema, nil
 	}
-	data, id, ok := planschema.ByVersion(SchemaVersion)
+	data, id, ok := planschema.ByVersion(version)
 	if !ok {
-		return nil, fmt.Errorf("unsupported schema_version %q", SchemaVersion)
+		return nil, fmt.Errorf("unsupported schema_version %q", version)
 	}
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
@@ -99,7 +99,7 @@ func schemaForVersion() (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	compiledSchema.value = schema
+	compiledSchemas.values[version] = schema
 	return schema, nil
 }
 
