@@ -327,8 +327,8 @@
 
 - 增量：I08 macOS 首份综合 Markdown/JSON 报告
 - 开始日期：2026-07-17
-- 客观检查状态：本地客观门禁通过，远程 CI 待检查
-- 维护者最终验收：Pending（全部客观门禁通过后依据 D-014 预授权更新）
+- 客观检查状态：本地与远程 CI 均通过
+- 维护者最终验收：Accepted（依据 D-014 维护者预授权，2026-07-17）
 - 接口检查：`envmason report` 默认输出 summary；`--format summary|markdown|json`、可重复 `--category` 和 `--severity` 按维护者确认语义工作。非法格式返回退出码 2，整体运行失败返回退出码 1。
 - 一致性检查：fixture 从同一个 Inventory 分别渲染三种格式，并逐项确认过滤后的 Tool、Installation 和 Finding 事实一致；终端摘要和 Markdown 都标注扫描时间、范围、完整状态、来源及失败项。
 - Schema 检查：真实与 fixture JSON 均由 `inventory.Marshal` 在输出前通过嵌入式 Inventory Schema `0.2.0` 校验；本增量没有修改或升级公开 Schema。
@@ -339,4 +339,6 @@
 - 只读与隐私检查：真实扫描前后 `.nvm/alias`、`.jenv`、`.m2`、`.gradle` 的路径、修改时间、权限和大小快照一致；JSON、summary 和 Markdown 均未出现真实 HOME、`127.0.0.1:10090`、URL 认证信息或常见凭据标记。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
 - 离线与跨平台检查：`GOPROXY=off` report、CLI、inventory 测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过，非 macOS 调用 report 在任何适配器执行前返回明确的不支持错误。
+- CI 检查：[I08 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29550292286)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29550372566)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I08 不包含远程最新版、EOL、版本比较、建议、Plan、安装、升级、卸载、配置写入或任何系统修改。
+- 结论：I08 已依据维护者预授权完成验收并合入 `main`；I04～I08 批次及 macOS 首个只读预览里程碑完成，I09 尚未开始。
