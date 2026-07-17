@@ -1,0 +1,6 @@
+{
+  "name": "envmason-i11-fixture",
+  "engines": {
+    "node": ">=22 <23"
+  }
+}

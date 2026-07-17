@@ -93,6 +93,8 @@ func newReportCommand(deps commandDependencies) *cobra.Command {
 	var categoryValues []string
 	var severityValues []string
 	var online bool
+	var projects []string
+	var excludes []string
 	command := &cobra.Command{
 		Use:                   "report",
 		Short:                 "Generate a read-only macOS environment report",
@@ -107,7 +109,7 @@ func newReportCommand(deps commandDependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			options := report.Options{Format: report.Format(format), Categories: categories, Severities: severities, Online: online}
+			options := report.Options{Format: report.Format(format), Categories: categories, Severities: severities, Online: online, Projects: projects, Excludes: excludes}
 			if err := report.ValidateOptions(options); err != nil {
 				return err
 			}
@@ -125,6 +127,8 @@ func newReportCommand(deps commandDependencies) *cobra.Command {
 	command.Flags().StringArrayVar(&categoryValues, "category", nil, "include a tool category (repeatable)")
 	command.Flags().StringArrayVar(&severityValues, "severity", nil, "include a finding severity (repeatable)")
 	command.Flags().BoolVar(&online, "online", false, "query official Node.js and Java version sources")
+	command.Flags().StringArrayVar(&projects, "project", nil, "scan an explicit project root (repeatable)")
+	command.Flags().StringArrayVar(&excludes, "exclude", nil, "exclude a path below each project root (repeatable)")
 	return command
 }
 

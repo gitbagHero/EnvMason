@@ -57,7 +57,7 @@ func TestHelpEntryPoints(t *testing.T) {
 func TestReportCommandPassesConfirmedOptions(t *testing.T) {
 	var received report.Options
 	code, stdout, stderr := executeForTestWithDependencies(
-		[]string{"report", "--format", "markdown", "--category", "runtime", "--category", "ecosystem", "--severity", "warning", "--online"},
+		[]string{"report", "--format", "markdown", "--category", "runtime", "--category", "ecosystem", "--severity", "warning", "--online", "--project", "/workspace", "--exclude", "archived"},
 		commandDependencies{generateReport: func(_ context.Context, options report.Options) ([]byte, error) {
 			received = options
 			return []byte("# report\n"), nil
@@ -77,6 +77,9 @@ func TestReportCommandPassesConfirmedOptions(t *testing.T) {
 	}
 	if !received.Online {
 		t.Fatal("--online was not passed to report generation")
+	}
+	if len(received.Projects) != 1 || received.Projects[0] != "/workspace" || len(received.Excludes) != 1 || received.Excludes[0] != "archived" {
+		t.Fatalf("project options = %#v / %#v", received.Projects, received.Excludes)
 	}
 }
 
@@ -105,6 +108,10 @@ func TestReportUsageAndOperationalErrorsHaveDifferentExitCodes(t *testing.T) {
 	code, stdout, stderr = executeForTestWithDependencies([]string{"report"}, deps)
 	if code != ExitFailure || stdout != "" || !strings.Contains(stderr, "scan unavailable") || strings.Contains(stderr, "for usage") {
 		t.Fatalf("operational error = code %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	code, stdout, stderr = executeForTestWithDependencies([]string{"report", "--exclude", "archived"}, deps)
+	if code != ExitUsage || stdout != "" || !strings.Contains(stderr, "--exclude requires") {
+		t.Fatalf("exclude usage error = code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }
 

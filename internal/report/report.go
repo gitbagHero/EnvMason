@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gitbagHero/EnvMason/internal/inventory"
+	"github.com/gitbagHero/EnvMason/internal/projectscan"
 	"github.com/gitbagHero/EnvMason/internal/versiondata"
 )
 
@@ -26,6 +27,8 @@ type Options struct {
 	Categories []inventory.ToolCategory
 	Severities []inventory.FindingSeverity
 	Online     bool
+	Projects   []string
+	Excludes   []string
 }
 
 func ValidateOptions(options Options) error {
@@ -42,6 +45,19 @@ func ValidateOptions(options Options) error {
 	for _, severity := range options.Severities {
 		if !validSeverity(severity) {
 			return fmt.Errorf("unsupported finding severity %q", severity)
+		}
+	}
+	if len(options.Excludes) > 0 && len(options.Projects) == 0 {
+		return errors.New("--exclude requires at least one --project")
+	}
+	for _, root := range options.Projects {
+		if strings.TrimSpace(root) == "" {
+			return errors.New("project root must not be empty")
+		}
+	}
+	for _, exclude := range options.Excludes {
+		if strings.TrimSpace(exclude) == "" {
+			return errors.New("project exclusion must not be empty")
 		}
 	}
 	return nil
@@ -89,6 +105,9 @@ func generate(ctx context.Context, options Options, scan func(context.Context) (
 	}
 	if options.Online {
 		appendVersionData(&value, collect(ctx))
+	}
+	if len(options.Projects) > 0 {
+		appendProjectData(&value, projectscan.Scan(ctx, projectscan.Request{Roots: options.Projects, Excludes: options.Excludes, CollectedAt: value.GeneratedAt}))
 	}
 	return Render(value, options)
 }

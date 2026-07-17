@@ -171,7 +171,8 @@ func hasIncompleteEvidence(findings []inventory.Finding) bool {
 		if code == "REPORT_SECTION_FAILED" || code == "HOMEBREW_LOCKED" ||
 			strings.HasSuffix(code, "_FAILED") || strings.HasSuffix(code, "_INVALID") ||
 			strings.HasSuffix(code, "_UNAVAILABLE") || strings.HasSuffix(code, "_BROKEN") ||
-			strings.HasSuffix(code, "_NOT_FOUND") || strings.HasSuffix(code, "_STALE") {
+			strings.HasSuffix(code, "_NOT_FOUND") || strings.HasSuffix(code, "_STALE") ||
+			strings.HasSuffix(code, "_INCOMPLETE") {
 			return true
 		}
 	}

@@ -59,6 +59,8 @@ envmason report --format json
 envmason report --category runtime --category ecosystem
 envmason report --severity warning --severity error
 envmason report --online
+envmason report --project /path/to/workspace
+envmason report --project project-a --project project-b --exclude archived
 envmason report --format json > envmason-report.json
 ```
 
@@ -67,3 +69,5 @@ envmason report --format json > envmason-report.json
 `--online` 是显式的只读联网入口，查询 Node.js 官方 release index/Release 工作组 schedule，以及 Adoptium available releases/Temurin support schedule。报告显示来源、数据时间和 fresh/stale 状态；超时、离线或外部数据异常不会阻止本地报告生成，过期数据不会冒充“已确认最新”。I10 不写持久化缓存，已有缓存仅通过可注入的只读契约使用。
 
 I09 的版本规范化与比较目前是内部确定性核心；I10 只提供远程版本事实，尚未把本机版本与远程版本组合成升级建议，这部分用户可见判断按后续增量开放。
+
+I11 的项目入口只扫描用户通过 `--project` 明确选择的目录；未提供该参数时不会搜索工作目录、HOME 或整个磁盘。扫描器只读取首批 Node/Java 版本声明白名单，忽略 `node_modules`、版本库内部目录和常见构建产物，不跟随符号链接，也不执行项目脚本或构建工具。`--exclude` 可重复使用，并要求至少存在一个 `--project`。

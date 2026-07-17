@@ -182,6 +182,16 @@
 - 决定：Java 支持现代数值版本、`1.8.0_361`、`8u361`、`-ea`、build number 及受限厂商/支持标签；Java GA 的厂商 build 不用于跨厂商更新排序，EA build 可用于同一 EA line 排序。
 - 决定：跨 scheme、非法、歧义或超长输入一律返回 Unknown，不进行字符串兜底排序；I09 不解析 npm/Maven 范围，也不生成升级或清理结论。
 
+### D-021：I11 显式项目引用扫描
+
+- 状态：Accepted（维护者于 2026-07-17 明确确认）
+- 事实依据：[NVM 官方 README](https://github.com/nvm-sh/nvm#nvmrc)定义 `.nvmrc` 作为项目 Node 版本声明；[npm 官方 package.json 文档](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/#engines)定义 `engines.node`；[asdf 官方配置文档](https://asdf-vm.com/manage/configuration.html#tool-versions)定义 `.tool-versions`；[Maven Compiler Plugin 官方文档](https://maven.apache.org/plugins/maven-compiler-plugin/examples/set-compiler-release.html)定义 `maven.compiler.release`，并保留 `source`/`target` 属性；[Gradle 官方 JVM Toolchains 文档](https://docs.gradle.org/current/userguide/toolchains.html)定义静态 Java toolchain 声明。
+- 决定：本批次作为 D-014 的一小时时间盒例外，只实施 I11；达到一小时即保留安全进度并暂停，I11 的本地门禁和远程 CI 未通过前绝不进入 I12。
+- 决定：公开可重复 `report --project <目录>` 与 `--exclude <相对子树>`；未提供 `--project` 时不访问项目目录，单独使用 `--exclude` 是用法错误。项目扫描始终本地只读，可与显式 `--online` 正交组合。
+- 决定：只读取 `.nvmrc`、`.node-version`、`package.json` 的 `engines.node`、`.java-version`、`.tool-versions` 的 Node/Java 条目、`pom.xml` 静态 Java 属性及 Gradle 静态 compatibility/toolchain 表达；不执行构建工具、脚本、Wrapper 或项目命令。
+- 决定：固定忽略版本库内部目录、依赖目录和常见构建产物，不跟随目录或文件符号链接；用户排除按每个根目录内精确相对子树处理。目录深度、目录数、文件数和单文件大小均有确定上限，超限或部分失败显式降级。
+- 决定：建立内部 Project→Runtime→Constraint→Source 关系；I11 通过现有 Finding 表达引用和冲突，不升级 Inventory Schema。只报告精确版本不等价或简单 Node 范围与精确版本确定不相容的冲突；动态、复杂或无法解析的声明为 Unknown，不回显未知原文。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -393,3 +403,18 @@
 - CI 检查：[I10 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29558808460)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29558918699)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I10 不比较本机项目约束，不生成升级/清理建议，不新增或修改公开 Inventory Schema，不包含 Plan、安装、升级、卸载、配置写入或系统修改。
 - 结论：I10 已依据维护者预授权完成验收并合入 `main`；I09～I10 一小时安全微批次完成并按约定暂停，I11 尚未开始。
+
+## I11 验收记录
+
+- 增量：I11 项目版本引用扫描
+- 开始日期：2026-07-17
+- 客观检查状态：本地功能测试与全量门禁通过，远程 CI 待运行
+- 维护者最终验收：Pending（等待远程 CI）
+- 接口检查：可重复 `report --project` 和 `--exclude` 已接入现有 summary、Markdown 和 JSON 报告；默认不扫描项目，`--exclude` 缺少 `--project` 时真实二进制返回退出码 2，项目扫描可与 `--online` 正交组合。
+- 格式与冲突检查：覆盖 `.nvmrc`、`.node-version`、`package.json engines.node`、`.java-version`、`.tool-versions`、`pom.xml`、`build.gradle`/`build.gradle.kts` 的静态正例、缺失字段、损坏和动态表达式；Node 简单范围与精确版本、Java 不等价精确版本形成独立冲突 Finding，等价版本和 Unknown 不误报。
+- 遍历、安全与隐私检查：内置依赖/构建/版本库目录、用户排除路径和符号链接均不被扫描；深度、目录数、文件数和单文件大小上限均有测试。未知声明不回显原文，测试令牌不进入结果，HOME 路径使用 `$HOME` 脱敏。
+- 功能检查：真实 fixture 输出 9 条结构化项目引用，并分别识别 Node 与 Java 冲突；扫描前后 fixture 的路径、修改时间、权限和大小摘要一致。项目 Finding 的 JSON 继续通过 Inventory Schema `0.2.0`。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过；目标包在 `GOPROXY=off` 下通过，全部包面向 Linux amd64 和 Windows amd64 编译检查通过。
+- CI 检查：待运行。
+- N/A：I11 不执行项目脚本或构建工具，不修改项目配置，不生成升级、删除或清理建议，不新增公开 Schema，不包含 Plan 或系统修改。
+- 结论：I11 本地客观验收通过；远程 CI 成功前保持 Pending，I12 未开始。
