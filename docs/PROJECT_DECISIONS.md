@@ -155,6 +155,16 @@
 - 决定：内部模型分别记录 JDK 安装、当前 Java、JAVA_HOME、jenv 选择、Maven runtime 与 Gradle Launcher/Daemon JVM；JAVA_HOME、jenv、Maven 或 Gradle 与当前 Java 不一致时产生独立 Finding，单项失败不阻断其他字段。
 - 决定：I07 不新增 CLI 命令或公开 Schema，不安装、升级或删除 JDK，不修改 jenv/JAVA_HOME/项目文件，不运行构建任务、Wrapper、Daemon 管理或网络请求；I08 再负责公开报告映射。
 
+### D-018：I08 macOS 综合只读报告接口
+
+- 状态：Accepted（维护者于 2026-07-17 明确确认）
+- 决定：公开 `envmason report`，默认输出终端摘要；`--format summary|markdown|json` 选择格式，`--category` 和 `--severity` 可重复使用。
+- 决定：同一过滤维度内多个值按 OR，类别与严重程度之间按 AND；系统信息始终保留，类别过滤作用于 Tool 及其关联 Finding，严重程度过滤作用于 Finding。
+- 决定：部分适配器失败仍生成报告并返回成功；整个 section 失败使用 `REPORT_SECTION_FAILED`，任一关键探测失败增加 `REPORT_INCOMPLETE`，共同显著标记不完整。只有平台不支持、无法建立扫描上下文、无法编码或无法写出报告等整体失败返回非零。
+- 决定：三种渲染器只消费同一个 `inventory.Inventory`；JSON 继续使用公开 Inventory Schema `0.2.0` 并在输出前本地校验，不升级 Schema。现有 Schema 没有专门字段的 NVM/jenv 选择和 Maven/Gradle Java runtime 事实映射为 `info` Finding。
+- 决定：扫描范围固定为系统、PATH、Homebrew、Node.js/NVM/npm/Corepack/pnpm/Yarn、Java/JDK/jenv/Maven/Gradle；扫描时间、范围、失败项和来源均进入报告。输出仅写 stdout，保存由 Shell 重定向完成。
+- 决定：I08 仅编排 I03～I07 的只读能力，不联网查询最新版或 EOL，不比较版本，不生成更新建议，不修改配置或系统；版本规范化与比较仍属于 I09。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -312,3 +322,21 @@
 - CI 回归检查：首次远程运行发现 macOS 预装 Gradle 即使仅查询版本也会初始化用户目录；改为只读解析本地分发元数据与已有配置后，[GitHub Actions CI](https://github.com/gitbagHero/EnvMason/actions/runs/29489120547) 六个任务全部通过。
 - N/A：I07 不包含 CLI 新命令、公开 Schema、远程版本/EOL、安装、升级、删除、配置写入或系统修改。
 - 结论：I07 已依据维护者预授权完成验收，已经提交到 `main` 且远程 CI 通过；按维护者要求在此暂停，I08 尚未开始。
+
+## I08 验收记录
+
+- 增量：I08 macOS 首份综合 Markdown/JSON 报告
+- 开始日期：2026-07-17
+- 客观检查状态：本地客观门禁通过，远程 CI 待检查
+- 维护者最终验收：Pending（全部客观门禁通过后依据 D-014 预授权更新）
+- 接口检查：`envmason report` 默认输出 summary；`--format summary|markdown|json`、可重复 `--category` 和 `--severity` 按维护者确认语义工作。非法格式返回退出码 2，整体运行失败返回退出码 1。
+- 一致性检查：fixture 从同一个 Inventory 分别渲染三种格式，并逐项确认过滤后的 Tool、Installation 和 Finding 事实一致；终端摘要和 Markdown 都标注扫描时间、范围、完整状态、来源及失败项。
+- Schema 检查：真实与 fixture JSON 均由 `inventory.Marshal` 在输出前通过嵌入式 Inventory Schema `0.2.0` 校验；本增量没有修改或升级公开 Schema。
+- 过滤检查：重复类别、重复严重程度去重；同维度 OR、跨维度 AND；系统信息始终保留，带 Tool ID 的 Finding 跟随类别过滤，不带 Tool ID 的全局 Finding 保留。
+- 降级检查：Homebrew 与 Java section 同时失败时 Node 结果仍被保留，三种格式仍可生成并显示 incomplete；单个 Node 版本探测失败也会增加 `REPORT_INCOMPLETE`。适配器原始错误及测试令牌不进入报告。
+- Markdown 检查：固定一级标题和 System、PATH、Tools、Findings、Data Sources 二级结构；表格单元格中的竖线、换行和反引号被转义或规整。
+- 真机检查：编译后的真实二进制识别 macOS 15.7.4 arm64、zsh、38 个 PATH 条目、90 个工具和 140 个安装实例；逐项对照 Homebrew formula 74/74、cask 8/8、NVM Node 6/6，并识别 10 个 JDK、Maven 及当前 Node/Java。未发现已知漏报或误报。
+- 只读与隐私检查：真实扫描前后 `.nvm/alias`、`.jenv`、`.m2`、`.gradle` 的路径、修改时间、权限和大小快照一致；JSON、summary 和 Markdown 均未出现真实 HOME、`127.0.0.1:10090`、URL 认证信息或常见凭据标记。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
+- 离线与跨平台检查：`GOPROXY=off` report、CLI、inventory 测试通过；全部包面向 Linux amd64 和 Windows amd64 编译通过，非 macOS 调用 report 在任何适配器执行前返回明确的不支持错误。
+- N/A：I08 不包含远程最新版、EOL、版本比较、建议、Plan、安装、升级、卸载、配置写入或任何系统修改。
