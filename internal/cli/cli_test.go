@@ -57,7 +57,7 @@ func TestHelpEntryPoints(t *testing.T) {
 func TestReportCommandPassesConfirmedOptions(t *testing.T) {
 	var received report.Options
 	code, stdout, stderr := executeForTestWithDependencies(
-		[]string{"report", "--format", "markdown", "--category", "runtime", "--category", "ecosystem", "--severity", "warning"},
+		[]string{"report", "--format", "markdown", "--category", "runtime", "--category", "ecosystem", "--severity", "warning", "--online"},
 		commandDependencies{generateReport: func(_ context.Context, options report.Options) ([]byte, error) {
 			received = options
 			return []byte("# report\n"), nil
@@ -75,6 +75,9 @@ func TestReportCommandPassesConfirmedOptions(t *testing.T) {
 	if len(received.Severities) != 1 || received.Severities[0] != "warning" {
 		t.Fatalf("severities = %#v", received.Severities)
 	}
+	if !received.Online {
+		t.Fatal("--online was not passed to report generation")
+	}
 }
 
 func TestReportCommandDefaultsToSummary(t *testing.T) {
@@ -86,7 +89,7 @@ func TestReportCommandDefaultsToSummary(t *testing.T) {
 	if code != ExitSuccess || stderr != "" {
 		t.Fatalf("report result = code %d, stderr %q", code, stderr)
 	}
-	if received.Format != report.FormatSummary || len(received.Categories) != 0 || len(received.Severities) != 0 {
+	if received.Format != report.FormatSummary || len(received.Categories) != 0 || len(received.Severities) != 0 || received.Online {
 		t.Fatalf("default options = %#v", received)
 	}
 }

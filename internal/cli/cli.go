@@ -92,6 +92,7 @@ func newReportCommand(deps commandDependencies) *cobra.Command {
 	var format string
 	var categoryValues []string
 	var severityValues []string
+	var online bool
 	command := &cobra.Command{
 		Use:                   "report",
 		Short:                 "Generate a read-only macOS environment report",
@@ -106,7 +107,7 @@ func newReportCommand(deps commandDependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			options := report.Options{Format: report.Format(format), Categories: categories, Severities: severities}
+			options := report.Options{Format: report.Format(format), Categories: categories, Severities: severities, Online: online}
 			if err := report.ValidateOptions(options); err != nil {
 				return err
 			}
@@ -123,6 +124,7 @@ func newReportCommand(deps commandDependencies) *cobra.Command {
 	command.Flags().StringVar(&format, "format", string(report.FormatSummary), "output format: summary, markdown, or json")
 	command.Flags().StringArrayVar(&categoryValues, "category", nil, "include a tool category (repeatable)")
 	command.Flags().StringArrayVar(&severityValues, "severity", nil, "include a finding severity (repeatable)")
+	command.Flags().BoolVar(&online, "online", false, "query official Node.js and Java version sources")
 	return command
 }
 

@@ -47,6 +47,13 @@ func renderSummary(value inventory.Inventory) []byte {
 			fmt.Fprintf(&output, "    evidence: %s\n", strings.Join(evidence, "; "))
 		}
 	}
+	remoteSources := collectRemoteSources(value)
+	if len(remoteSources) > 0 {
+		fmt.Fprintln(&output, "\nRemote data sources:")
+		for _, source := range remoteSources {
+			fmt.Fprintf(&output, "  %s | collected=%s | confidence=%s\n", plainCell(source.Name), source.CollectedAt.Format("2006-01-02T15:04:05Z07:00"), source.Confidence)
+		}
+	}
 	return output.Bytes()
 }
 
@@ -114,9 +121,19 @@ func renderMarkdown(value inventory.Inventory) []byte {
 	fmt.Fprintln(&output, "\n## Data Sources")
 	fmt.Fprintln(&output)
 	for _, source := range collectSources(value) {
-		fmt.Fprintf(&output, "- `%s` — %s (%s)\n", markdownCell(string(source.Kind)), markdownCell(source.Name), source.Confidence)
+		fmt.Fprintf(&output, "- `%s` — %s (collected `%s`; %s)\n", markdownCell(string(source.Kind)), markdownCell(source.Name), markdownCell(source.CollectedAt.Format("2006-01-02T15:04:05Z07:00")), source.Confidence)
 	}
 	return output.Bytes()
+}
+
+func collectRemoteSources(value inventory.Inventory) []inventory.SourceMetadata {
+	result := []inventory.SourceMetadata{}
+	for _, source := range collectSources(value) {
+		if strings.Contains(source.Name, "https://") || strings.Contains(source.Name, "http://") {
+			result = append(result, source)
+		}
+	}
+	return result
 }
 
 func markdownCell(value string) string {

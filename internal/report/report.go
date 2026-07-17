@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gitbagHero/EnvMason/internal/inventory"
+	"github.com/gitbagHero/EnvMason/internal/versiondata"
 )
 
 type Format string
@@ -24,6 +25,7 @@ type Options struct {
 	Format     Format
 	Categories []inventory.ToolCategory
 	Severities []inventory.FindingSeverity
+	Online     bool
 }
 
 func ValidateOptions(options Options) error {
@@ -71,15 +73,22 @@ func ParseSeverities(values []string) ([]inventory.FindingSeverity, error) {
 
 // Generate performs one read-only scan and renders the filtered result.
 func Generate(ctx context.Context, options Options) ([]byte, error) {
+	return generate(ctx, options, Scan, versiondata.Collect)
+}
+
+func generate(ctx context.Context, options Options, scan func(context.Context) (inventory.Inventory, error), collect func(context.Context) versiondata.Result) ([]byte, error) {
 	if options.Format == "" {
 		options.Format = FormatSummary
 	}
 	if err := ValidateOptions(options); err != nil {
 		return nil, err
 	}
-	value, err := Scan(ctx)
+	value, err := scan(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if options.Online {
+		appendVersionData(&value, collect(ctx))
 	}
 	return Render(value, options)
 }
