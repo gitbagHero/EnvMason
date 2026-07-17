@@ -483,3 +483,23 @@
 - 远程检查：[I13 分支 CI #34](https://github.com/gitbagHero/EnvMason/actions/runs/29564907148) 与 [main CI #35](https://github.com/gitbagHero/EnvMason/actions/runs/29565075895) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
 - N/A：I13 不保存或接受 Plan、不接受用户确认、不提供 apply、执行器、进程调用、提权、安装、升级、卸载、清理、操作日志或系统写入。
 - 结论：I13 已依据维护者预授权完成验收并进入 `main`；I12～I13 两小时时间盒批次完成，按约定停在 I14 之前。
+
+## I14 验收记录
+
+- 增量：I14 通用受控执行器与操作日志
+- 开始与检查日期：2026-07-17
+- 客观检查状态：Passed
+- 维护者最终验收：Accepted（依据维护者对 I14 推荐方案的明确确认及 D-014 预授权，2026-07-17）
+- Plan 兼容检查：新增 Plan Schema `0.2.0` 并完整保留 `0.1.0` 文件、验证和现有 CLI 输出；`0.2.0` 只允许声明式 R1/R2 Action，拒绝 command/args/Shell 字段、不可执行标志、未知风险、风险下调、提权和内容修改后复用旧 Plan ID。
+- 确认与注册表检查：执行前重新校验 Plan 内容 ID、30 分钟有效期以及绑定相同 Plan ID 的计划级确认；未确认、确认时间非法、Plan 过期、内容被修改、动作未注册或风险低于注册表下限时，在创建日志或启动进程前失败。
+- 进程检查：唯一生产进程边界使用 `exec.CommandContext`、绝对可执行路径、结构化参数、由注册表提供的最小环境和最长 30 秒超时，不调用 Shell。真实子进程测试覆盖成功、启动失败、非零退出、超时、取消、自杀式异常退出和 stdout 超限。
+- 注入检查：包含空格、中文、Emoji、分号、管道、`$()` 和 `&` 的参数逐字传递，未创建注入标记文件；Plan Schema 不携带任何进程命令或参数，执行规范只来自确定性注册表。
+- 状态与验证检查：Operation Record `0.1.0` 记录 Pending、Running、Verifying 和终态迁移；只有进程成功且注册验证器通过才能 Completed。进程失败、验证失败、存储失败以及恢复的遗留 Running/Verifying 记录均不会伪装为 Completed。
+- 日志与隐私检查：stdout/stderr 分别限制 64 KiB 并标记截断；显式敏感值及常见 Token/Password/Secret/Authorization 赋值在落盘前脱敏。测试逐字节确认模拟 Token 不存在于任何中间或最终 JSON 文件。
+- 持久化检查：Operation Record 通过嵌入式 Draft 2020-12 Schema 校验；同目录临时文件、同步和安全替换覆盖状态更新，Unix 目录/文件权限为 `0700`/`0600`，记录及备份符号链接、非法 Operation ID、路径穿越和损坏 JSON 被拒绝。
+- 平台目录检查：macOS、Windows 和 Linux 使用 D-024 确定的原生状态目录；Windows/Linux amd64 目标测试二进制编译通过，跨平台差异由 CI 验证。
+- 真机 smoke：本机重新构建 CLI 后 `envmason version` 成功输出 `envmason devel`、Go 版本和 `darwin/arm64`，与内置无害测试动作的固定调用及验证契约一致。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` I14 核心测试以及 Windows/Linux amd64 目标编译均通过。
+- 远程检查：[I14 分支 CI #37](https://github.com/gitbagHero/EnvMason/actions/runs/29579093567) 与 [main CI #38](https://github.com/gitbagHero/EnvMason/actions/runs/29579204448) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
+- N/A：I14 不新增公开 CLI 命令或 apply，不执行 NVM、Homebrew 或其他包管理器，不安装、升级、卸载、切换默认版本、换源、提权或修改系统服务；I15 尚未开始。
+- 结论：I14 已依据维护者明确方案和预授权完成验收并进入 `main`；本次一小时时间盒批次完成，按约定停在 I15 之前。
