@@ -408,13 +408,13 @@
 
 - 增量：I11 项目版本引用扫描
 - 开始日期：2026-07-17
-- 客观检查状态：本地功能测试与全量门禁通过，远程 CI 待运行
-- 维护者最终验收：Pending（等待远程 CI）
+- 客观检查状态：本地功能测试、全量门禁与远程 CI 均通过
+- 维护者最终验收：Accepted（依据 D-014 维护者预授权，2026-07-17）
 - 接口检查：可重复 `report --project` 和 `--exclude` 已接入现有 summary、Markdown 和 JSON 报告；默认不扫描项目，`--exclude` 缺少 `--project` 时真实二进制返回退出码 2，项目扫描可与 `--online` 正交组合。
 - 格式与冲突检查：覆盖 `.nvmrc`、`.node-version`、`package.json engines.node`、`.java-version`、`.tool-versions`、`pom.xml`、`build.gradle`/`build.gradle.kts` 的静态正例、缺失字段、损坏和动态表达式；Node 简单范围与精确版本、Java 不等价精确版本形成独立冲突 Finding，等价版本和 Unknown 不误报。
 - 遍历、安全与隐私检查：内置依赖/构建/版本库目录、用户排除路径和符号链接均不被扫描；深度、目录数、文件数和单文件大小上限均有测试。未知声明不回显原文，测试令牌不进入结果，HOME 路径使用 `$HOME` 脱敏。
 - 功能检查：真实 fixture 输出 9 条结构化项目引用，并分别识别 Node 与 Java 冲突；扫描前后 fixture 的路径、修改时间、权限和大小摘要一致。项目 Finding 的 JSON 继续通过 Inventory Schema `0.2.0`。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过；目标包在 `GOPROXY=off` 下通过，全部包面向 Linux amd64 和 Windows amd64 编译检查通过。
-- CI 检查：待运行。
+- CI 检查：[I11 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29560937178)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29561069909)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I11 不执行项目脚本或构建工具，不修改项目配置，不生成升级、删除或清理建议，不新增公开 Schema，不包含 Plan 或系统修改。
-- 结论：I11 本地客观验收通过；远程 CI 成功前保持 Pending，I12 未开始。
+- 结论：I11 已依据维护者预授权完成验收并合入 `main`；I11 单增量一小时时间盒完成并按约定暂停，I12 尚未开始。
