@@ -380,8 +380,8 @@
 
 - 增量：I10 远程版本与 EOL 数据提供器
 - 开始日期：2026-07-17
-- 客观检查状态：本地功能测试与全量门禁通过，远程 CI 待运行
-- 维护者最终验收：Pending（等待远程 CI）
+- 客观检查状态：本地功能测试、全量门禁与远程 CI 均通过
+- 维护者最终验收：Accepted（依据 D-014 维护者预授权，2026-07-17）
 - 接口检查：`envmason report` 仍默认完全离线；只有显式 `envmason report --online` 才并发查询四个官方只读来源。
 - 来源检查：Node.js 使用官方 release index 和 Release 工作组 schedule；Java 使用 Adoptium available releases API，生命周期数据明确限定为 Eclipse Temurin，其他 JDK 厂商保守返回 Unknown。
 - 数据语义检查：区分 Latest Stable、Latest LTS、stable、LTS、EOL 和 Unknown；报告显示来源 URL、数据获取时间及 fresh/stale/unavailable 状态。
@@ -390,5 +390,6 @@
 - 缓存与写入检查：I10 缓存契约只有 Read，不提供 Write；默认与 `--online` 生产路径均不创建或修改磁盘缓存。持久化缓存写入延后到具备 Plan 的后续增量。
 - 真实来源 smoke：2026-07-17 通过本机代理成功读取四个官方来源，识别 Node latest stable `v26.5.0`、latest LTS `v24.18.0`、Java latest feature `26` 和 latest LTS `25`，并解析 Temurin 生命周期表。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过；目标包在 `GOPROXY=off` 下通过，全部包面向 Linux amd64 和 Windows amd64 编译检查通过。
+- CI 检查：[I10 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29558808460)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29558918699)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I10 不比较本机项目约束，不生成升级/清理建议，不新增或修改公开 Inventory Schema，不包含 Plan、安装、升级、卸载、配置写入或系统修改。
-- 结论：I10 本地客观验收通过；远程 CI 成功前保持 Pending，且本批次绝不进入 I11。
+- 结论：I10 已依据维护者预授权完成验收并合入 `main`；I09～I10 一小时安全微批次完成并按约定暂停，I11 尚未开始。
