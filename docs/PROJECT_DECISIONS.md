@@ -187,7 +187,6 @@
 | 事项 | 最迟决策增量 |
 |---|---|
 | YAML Profile 正式 Schema | I19 |
-| 首批版本信息来源和缓存策略 | I10 |
 | Windows 提权与 WinGet Configuration 边界 | I28 前 |
 | Ubuntu LTS 具体版本范围 | I31 前 |
 | 第三方适配器动态加载与隔离方案 | I51 |
@@ -364,8 +363,8 @@
 
 - 增量：I09 通用版本规范化与比较
 - 开始日期：2026-07-17
-- 客观检查状态：本地门禁通过，远程 CI 待运行
-- 维护者最终验收：Pending（等待远程 CI）
+- 客观检查状态：本地门禁与远程 CI 均通过
+- 维护者最终验收：Accepted（依据 D-014 维护者预授权，2026-07-17）
 - 接口检查：新增独立 `internal/version` 确定性核心，解析结果保留 Raw、Normalized、Scheme 和 Comparable；非法输入、跨 scheme 或缺失内部解析状态均返回 Unknown。
 - SemVer/Node 检查：覆盖 SemVer 2.0.0 核心版本、预发布优先级、build metadata、小写 `v` 前缀、任意长度数值及非法前导零；build metadata 不影响比较。
 - Java 检查：覆盖现代数值版本、`1.8.0_361`、`8u361`、EA、build number 和受限厂商/支持标签；传统 Java 8 表达归一到同一比较线，GA 厂商 build 不参与跨厂商更新排序。
@@ -373,5 +372,6 @@
 - 保守失败检查：空白、不完整、歧义、超长、未知标签和非法分隔符输入均不可比较，不进行字符串兜底排序，也不产生升级或清理结论。
 - 自动检查：`go test -count=1 ./internal/version`、`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt 和 `git diff --check` 均通过。
 - 离线与跨平台检查：`GOPROXY=off go test -count=1 ./internal/version` 通过；全部包面向 Linux amd64 和 Windows amd64 编译检查通过。
+- CI 检查：[I09 分支 CI](https://github.com/gitbagHero/EnvMason/actions/runs/29557979075)和合入后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/29558052726)均为 macOS、Ubuntu、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I09 不新增 CLI、公开 Schema、网络访问、建议、Plan、缓存、安装、升级、卸载、配置写入或系统修改。
-- 结论：I09 本地客观验收已通过；远程 CI 成功前保持 Pending，且不得开始 I10。
+- 结论：I09 已依据维护者预授权完成验收并合入 `main`；I10 已具备顺序依赖条件，但尚未开始。
