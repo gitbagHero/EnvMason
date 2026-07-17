@@ -456,3 +456,21 @@
 - 远程检查：[I12 分支 CI #31](https://github.com/gitbagHero/EnvMason/actions/runs/29563334632) 与 [main CI #32](https://github.com/gitbagHero/EnvMason/actions/runs/29563470099) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
 - N/A：I12 不生成 Plan，不执行安装、升级、卸载、清理、默认切换、Shell、提权或系统写入。
 - 结论：I12 已依据维护者预授权完成验收并进入 `main`；I13 已具备顺序依赖条件，但尚未开始。
+
+## I13 验收记录
+
+- 增量：I13 只读 Plan/Action 模型
+- 开始与检查日期：2026-07-17
+- 客观检查状态：Passed
+- 维护者最终验收：Accepted（依据 D-014、D-022 与 D-023 维护者预授权，2026-07-17）
+- 接口检查：公开 `envmason plan --tool runtime.node --online --format summary|json`，并复用只读 `--policy`、`--project`、`--exclude`；未知工具/格式、缺少 `--online` 或孤立 `--exclude` 在调用生成器前返回退出码 2。
+- 建议门禁：只有安全可比较且较旧的 Node 版本、fresh LTS/Stable 或已由 fresh 官方 release index 精确验证的 Pin、可识别的 NVM 能力同时成立时才生成 Plan；stale、ignored、已推荐、通道更高或无 NVM 均不伪造动作。
+- Plan 契约：Plan Schema `0.1.0` 固定 `executable=false`，恰好 30 分钟有效；包含内容派生 ID、环境/策略 digest、结构化环境摘要，以及带依赖、R2 风险、计划级确认、下载状态、前置条件、验证与恢复元数据的 NVM `install_version` Action。
+- 不可变检查：固定输入与时间生成字节一致的 JSON 和相同 Plan ID；修改目标、风险、验证、恢复、环境、策略或时间会使旧 ID 失效。环境摘要与 digest 不一致也会被拒绝。
+- 安全验证：未知风险、R1 降级、提权、可执行标志、非法目标、重复/未知依赖、依赖环、缺失 verifier、缺失恢复说明和未知 Schema 字段均被 Schema 或语义校验拒绝。
+- 执行边界：Plan JSON 不含 command、args、Shell 或 executor；源码能力审计确认生产 `internal/plan` 不直接导入 `os/exec`、`syscall`、`unsafe`，也不调用文件创建、修改、删除或重命名 API。
+- 真机 smoke：真实二进制帮助正确显示 `plan`；缺少 `--online` 返回退出码 2；本机当前无合格 Node 更新建议时返回退出码 1 和明确错误，没有生成空 Plan 或系统变更。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./cmd/envmason`、gofmt、`git diff --check` 及 `GOPROXY=off` Plan/Schema/Assessment/Report 核心测试均通过。
+- 远程检查：[I13 分支 CI #34](https://github.com/gitbagHero/EnvMason/actions/runs/29564907148) 与 [main CI #35](https://github.com/gitbagHero/EnvMason/actions/runs/29565075895) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
+- N/A：I13 不保存或接受 Plan、不接受用户确认、不提供 apply、执行器、进程调用、提权、安装、升级、卸载、清理、操作日志或系统写入。
+- 结论：I13 已依据维护者预授权完成验收并进入 `main`；I12～I13 两小时时间盒批次完成，按约定停在 I14 之前。
