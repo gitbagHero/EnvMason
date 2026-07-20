@@ -515,3 +515,23 @@
 - 远程检查：[I14 分支 CI #37](https://github.com/gitbagHero/EnvMason/actions/runs/29579093567) 与 [main CI #38](https://github.com/gitbagHero/EnvMason/actions/runs/29579204448) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
 - N/A：I14 不新增公开 CLI 命令或 apply，不执行 NVM、Homebrew 或其他包管理器，不安装、升级、卸载、切换默认版本、换源、提权或修改系统服务；I15 尚未开始。
 - 结论：I14 已依据维护者明确方案和预授权完成验收并进入 `main`；本次一小时时间盒批次完成，按约定停在 I15 之前。
+
+## I15 验收记录
+
+- 增量：I15 单个 NVM Node 版本安装
+- 开始日期：2026-07-17；完成与检查日期：2026-07-20
+- 客观检查状态：Passed
+- 维护者最终验收：Accepted（依据 D-014 预授权及维护者对 D-025 接口和安全边界的明确确认）
+- 接口检查：公开 `envmason apply --tool runtime.node --version <精确版本> --online [--dry-run]`；缺少 fresh 联网证据、未知工具、缺失版本和未定义的 `--yes` 在准备 Plan 前拒绝。I13 `envmason plan` 继续生成不可执行 Plan `0.1.0`。
+- Plan 与确认检查：dry-run 在内存中生成并显示可执行 Plan `0.2.0`，不确认、不运行 NVM 且不创建历史目录；真实 apply 只接受交互终端逐字输入 `apply <完整 Plan ID>`。错误输入、拒绝、EOF、非交互输入、错误确认 ID、过期或内容变化均不执行动作。
+- 目标与漂移检查：目标必须高于当前生效版本并精确存在于 fresh Node.js 官方 release index；确认后重新扫描环境并重建同一 Plan ID。系统摘要、`nvm.sh` 或 default alias 在审查后变化时分别在历史写入前或进程启动前拒绝。
+- 固定适配器检查：唯一 NVM 写适配器固定调用 `/bin/bash --noprofile --norc` 和编译期脚本，只 source 已摘要绑定的 `nvm.sh --no-use`，执行 `nvm install -b --skip-default-packages --no-progress`；目录和版本仅作为位置参数传递，不接受 Shell 文本、可执行路径或附加参数。
+- 环境与隐私检查：只传入 HOME、NVM_DIR、固定系统 PATH、临时目录和标准代理变量，不继承 NVM mirror、认证、`BASH_ENV`、`NODE_OPTIONS` 或包管理器秘密；NVM 目录、HOME、临时路径、代理值和模拟令牌在操作记录中脱敏。`nvm.sh` 与 default alias 必须是受大小限制的非符号链接普通文件。
+- 成功与幂等检查：fixture 和真实 NVM 均验证目标 Node 可执行、原 Node 22 仍可执行、原生效 Node 未改变、default alias 内容摘要未改变且原安装全部保留；目标已安装时跳过 NVM 进程，但仍验证并写入新的已确认操作记录。部分目标目录不被误判为已安装。
+- 失败与取消检查：下载失败和磁盘不足 fixture 产生 Failed 与标准化非零退出错误；用户取消产生 Cancelled，Unix 进程组终止测试确认后代进程不会残留。失败不自动清理部分目录或缓存，不夹带 R3 删除。
+- 操作记录检查：当前 Operation Record Schema 升为 `0.2.0`，新增执行前后事实快照、内容 digest、确定性 diff 和 skipped 状态；`0.1.0` Schema、解码和语义验证继续通过。只有进程或幂等检查成功且目标、旧版本、active 和 default 验证全部通过才能 Completed。
+- 真实可恢复环境检查：一次性 Docker Linux/arm64 容器使用 NVM v0.40.4 安装 Node v22.0.0 并设为 default，I15 适配器随后以官方二进制和 checksum 安装 v24.14.0；测试确认 v22.0.0/default 保留、v24.14.0 可执行且二次运行识别为已满足。宿主机 NVM 未被修改。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` I15 核心测试以及 Linux/Windows amd64 目标构建均通过。
+- 远程检查：[I15 分支 CI #40](https://github.com/gitbagHero/EnvMason/actions/runs/29721966589) 与 [main CI #41](https://github.com/gitbagHero/EnvMason/actions/runs/29722093239) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
+- N/A：I15 不安装 NVM，不修改 default alias，不切换当前 Shell，不升级 npm/Corepack/pnpm，不卸载或清理旧 Node，不提权，不支持无人值守确认，也不开放 Linux/Windows apply。
+- 结论：I15 已依据维护者明确方案和预授权完成验收并进入 `main`；当前停在 I16 之前，未实现默认版本切换。
