@@ -550,8 +550,8 @@
 
 - 增量：I16 Node 默认版本切换
 - 开始、完成与本地检查日期：2026-07-20
-- 客观检查状态：本地 Passed；远程 CI 待首次提交后验证
-- 维护者决策状态：D-026 接口、公开 Schema 和安全边界已明确确认；最终验收待远程 CI 通过
+- 客观检查状态：本地功能测试、全量门禁与远程 CI 均通过
+- 维护者最终验收：Accepted（依据维护者对 D-026 接口、公开 Schema 和安全边界的明确确认及 D-014 预授权）
 - 接口检查：公开 `envmason default set --tool runtime.node --version <已安装精确版本> [--dry-run]` 与 `envmason default restore --operation <Operation ID> [--dry-run]`。未安装目标、未知工具、浮动版本、非法 Operation ID 和未定义的 `--yes` 在写入前拒绝；不需要联网。
 - Plan 与确认检查：Plan Schema `0.3.0` 只允许单个 Node/NVM `set_default` 或 `restore_default` R3 Action，下载为 0、无依赖、不提权；`0.2.0` 和 `0.1.0` 保持验证能力。set/restore 分别只接受 `set-default <完整 Plan ID>` 和 `restore-default <完整 Plan ID>`，错误确认、非交互输入、过期、内容变更和环境漂移均不执行。
 - 设置检查：fixture 验证仅将规范 default alias 从 `22` 改为 `v24.14.0`；目标和原默认版本都必须是可执行 NVM 安装。当前 Shell Node 保持 v22，隔离新 Shell 选择 v24.14.0；重新生成的相同目标 Plan 幂等跳过写动作但仍验证并记录。
@@ -561,5 +561,6 @@
 - 真实 NVM 和本机只读检查：一次性临时 NVM 目录直接使用本机真实 `nvm.sh`，完成 `v22.0.0 → v24.14.0 → v22.0.0`，源 NVM 未修改。真实 CLI dry-run 正确识别宿主 `node → v26.5.0`，非交互真实执行返回 1，宿主 alias 仍为 `node` 且未新增操作记录。
 - 稳定性检查：全量 race 首轮暴露 Unix 进程组取消与后代 fork 的时序竞争；取消器在有限 100 ms 内重复向同一进程组发送 SIGKILL。目标 race 测试连续 10 次与后续全量 race 均通过。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` I16 核心测试以及 Linux/Windows amd64 目标构建均通过。
+- 远程检查：[main CI #43](https://github.com/gitbagHero/EnvMason/actions/runs/29725948971) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I16 不安装或升级 NVM/Node/npm/Corepack/pnpm，不卸载或清理任何版本，不修改 Shell profile，不切换当前 Shell，不提权，不提供无人值守确认或自动回滚，不进入 I17。
-- 结论：I16 本地实现与客观验收已通过；待远程 CI 通过后依据维护者明确决策和 D-014 预授权标记 Accepted。本批次到 I16 结束，不自动进入 I17。
+- 结论：I16 已依据维护者明确决策和 D-014 预授权完成验收并进入 `main`。本批次到 I16 结束，I17 尚未开始。
