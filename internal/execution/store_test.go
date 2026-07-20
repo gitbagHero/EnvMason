@@ -58,7 +58,7 @@ func TestFileStoreWritesProtectedVersionedRecordAndLoadsLatestState(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"schema_version": "0.1.0"`) {
+	if !strings.Contains(string(data), `"schema_version": "0.2.0"`) {
 		t.Fatal("persisted record has no operation schema version")
 	}
 	if runtime.GOOS != "windows" {

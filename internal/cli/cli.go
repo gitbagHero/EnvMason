@@ -1,14 +1,19 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	applypkg "github.com/gitbagHero/EnvMason/internal/apply"
 	"github.com/gitbagHero/EnvMason/internal/buildinfo"
+	"github.com/gitbagHero/EnvMason/internal/execution"
 	planpkg "github.com/gitbagHero/EnvMason/internal/plan"
 	"github.com/gitbagHero/EnvMason/internal/report"
 )
@@ -22,7 +27,11 @@ const (
 // Execute runs the EnvMason CLI with explicit inputs and outputs so command
 // behavior can be tested without changing process-global state.
 func Execute(args []string, stdout, stderr io.Writer, info buildinfo.Info) int {
-	return execute(args, stdout, stderr, info, commandDependencies{generateReport: report.Generate, generatePlan: planpkg.Generate})
+	service := applypkg.DefaultService()
+	return execute(args, stdout, stderr, info, commandDependencies{
+		generateReport: report.Generate, generatePlan: planpkg.Generate,
+		prepareApply: service.Prepare, executeApply: service.Execute, confirmApply: confirmPlan,
+	})
 }
 
 func execute(args []string, stdout, stderr io.Writer, info buildinfo.Info, deps commandDependencies) int {
@@ -45,6 +54,9 @@ func execute(args []string, stdout, stderr io.Writer, info buildinfo.Info, deps 
 type commandDependencies struct {
 	generateReport func(context.Context, report.Options) ([]byte, error)
 	generatePlan   func(context.Context, planpkg.Options) ([]byte, error)
+	prepareApply   func(context.Context, applypkg.Options) (applypkg.Prepared, error)
+	executeApply   func(context.Context, applypkg.Prepared, execution.ConfirmationReceipt) (applypkg.Result, error)
+	confirmApply   func(string) (execution.ConfirmationReceipt, error)
 }
 
 type operationalError struct{ err error }
@@ -87,8 +99,81 @@ func newRootCommand(info buildinfo.Info, stdout, stderr io.Writer, deps commandD
 	})
 	root.AddCommand(newReportCommand(deps))
 	root.AddCommand(newPlanCommand(deps))
+	root.AddCommand(newApplyCommand(deps))
 
 	return root
+}
+
+func newApplyCommand(deps commandDependencies) *cobra.Command {
+	var toolID string
+	var version string
+	var online bool
+	var dryRun bool
+	command := &cobra.Command{
+		Use:                   "apply",
+		Short:                 "Review and apply one confirmed Node.js NVM installation Plan",
+		Args:                  cobra.NoArgs,
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			options := applypkg.Options{ToolID: toolID, Version: version, Online: online}
+			if err := applypkg.ValidateOptions(options); err != nil {
+				return err
+			}
+			if deps.prepareApply == nil || deps.executeApply == nil || deps.confirmApply == nil {
+				return operationalError{err: errors.New("apply dependencies are unavailable")}
+			}
+			prepared, err := deps.prepareApply(cmd.Context(), options)
+			if err != nil {
+				return operationalError{err: fmt.Errorf("prepare executable Plan: %w", err)}
+			}
+			data, err := planpkg.Render(prepared.Plan, planpkg.FormatSummary)
+			if err != nil {
+				return operationalError{err: fmt.Errorf("render executable Plan: %w", err)}
+			}
+			if _, err := cmd.OutOrStdout().Write(data); err != nil {
+				return operationalError{err: fmt.Errorf("write executable Plan: %w", err)}
+			}
+			if dryRun {
+				fmt.Fprintln(cmd.OutOrStdout(), "Dry run complete; no action or operation record was created.")
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Type 'apply %s' to confirm this exact Plan: ", prepared.Plan.ID)
+			receipt, err := deps.confirmApply(prepared.Plan.ID)
+			if err != nil {
+				return operationalError{err: err}
+			}
+			result, err := deps.executeApply(cmd.Context(), prepared, receipt)
+			if result.RecordPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Operation record: %s\n", result.RecordPath)
+			}
+			if err != nil {
+				return operationalError{err: fmt.Errorf("execute confirmed Plan: %w", err)}
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Operation %s completed and verified.\n", result.Record.ID)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&toolID, "tool", "", "tool ID; I15 supports runtime.node")
+	command.Flags().StringVar(&version, "version", "", "exact stable Node.js version to install")
+	command.Flags().BoolVar(&online, "online", false, "require fresh official Node.js release evidence")
+	command.Flags().BoolVar(&dryRun, "dry-run", false, "review the executable Plan without confirmation or writes")
+	return command
+}
+
+func confirmPlan(planID string) (execution.ConfirmationReceipt, error) {
+	info, err := os.Stdin.Stat()
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return execution.ConfirmationReceipt{}, errors.New("interactive plan-level confirmation is required")
+	}
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 256), 1024)
+	if !scanner.Scan() {
+		return execution.ConfirmationReceipt{}, errors.New("Plan was not confirmed")
+	}
+	if scanner.Text() != "apply "+planID {
+		return execution.ConfirmationReceipt{}, errors.New("Plan was not confirmed; no action was executed")
+	}
+	return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: planID, ConfirmedAt: time.Now().UTC()}, nil
 }
 
 func newPlanCommand(deps commandDependencies) *cobra.Command {

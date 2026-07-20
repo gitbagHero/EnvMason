@@ -92,18 +92,45 @@ func (executor Executor) Execute(ctx context.Context, request Request) (Record, 
 			}
 		}
 		step.Precondition = CheckResult{State: CheckPassed, Message: "registered precondition passed"}
+		if item.definition.Capture != nil {
+			before, err := item.definition.Capture(ctx, item.action)
+			if err != nil {
+				step.Precondition = CheckResult{State: CheckFailed, Message: "registered state capture failed"}
+				failure := executionError(CodePreconditionFailed, "registered action state could not be captured")
+				return executor.finishFailure(record, index, StateFailed, failure)
+			}
+			step.Before = &before
+		}
 		record.UpdatedAt = executor.now()
 		if err := executor.Store.Save(record); err != nil {
 			return executor.logFailure(record, index)
 		}
 
-		result := executor.Runner.Run(ctx, item.spec)
+		satisfied := false
+		if item.definition.Satisfied != nil {
+			var err error
+			satisfied, err = item.definition.Satisfied(ctx, item.action)
+			if err != nil {
+				step.Precondition = CheckResult{State: CheckFailed, Message: "registered idempotency check failed"}
+				failure := executionError(CodePreconditionFailed, "registered action idempotency check failed")
+				return executor.finishFailure(record, index, StateFailed, failure)
+			}
+		}
+		result := ProcessResult{}
+		if satisfied {
+			code := 0
+			result.ExitCode = &code
+			step.Skipped = true
+		} else {
+			result = executor.Runner.Run(ctx, item.spec)
+		}
 		result.Stdout = sanitizeOutput(result.Stdout, redactor)
 		result.Stderr = sanitizeOutput(result.Stderr, redactor)
 		step.Stdout = result.Stdout
 		step.Stderr = result.Stderr
 		step.ExitCode = result.ExitCode
 		if result.Failure != nil {
+			executor.captureAfter(ctx, item, step)
 			state := failureState(result.Failure.Code)
 			return executor.finishFailure(record, index, state, result.Failure)
 		}
@@ -113,7 +140,16 @@ func (executor Executor) Execute(ctx context.Context, request Request) (Record, 
 		record.UpdatedAt = verifyingAt
 		step.State = StateVerifying
 		step.Verification = CheckResult{State: CheckPending}
-		record.Transitions = append(record.Transitions, Transition{State: StateVerifying, At: verifyingAt, ActionID: item.action.ID, Reason: "process succeeded; registered verification started"})
+		reason := "process succeeded; registered verification started"
+		if satisfied {
+			reason = "target state already satisfied; process skipped and registered verification started"
+		}
+		record.Transitions = append(record.Transitions, Transition{State: StateVerifying, At: verifyingAt, ActionID: item.action.ID, Reason: reason})
+		if err := executor.captureAfter(ctx, item, step); err != nil {
+			step.Verification = CheckResult{State: CheckFailed, Message: "registered state capture failed"}
+			failure := executionError(CodeVerificationFailed, "registered action state could not be captured after execution")
+			return executor.finishFailure(record, index, StateFailed, failure)
+		}
 		if err := executor.Store.Save(record); err != nil {
 			return executor.logFailure(record, index)
 		}
@@ -144,6 +180,21 @@ func (executor Executor) Execute(ctx context.Context, request Request) (Record, 
 		}
 	}
 	return record, nil
+}
+
+func (executor Executor) captureAfter(ctx context.Context, item preparedAction, step *StepRecord) error {
+	if item.definition.Capture == nil {
+		return nil
+	}
+	after, err := item.definition.Capture(ctx, item.action)
+	if err != nil {
+		return err
+	}
+	step.After = &after
+	if step.Before != nil {
+		step.Diff = DiffSnapshots(*step.Before, after)
+	}
+	return nil
 }
 
 func validateRequest(request Request, now time.Time) error {

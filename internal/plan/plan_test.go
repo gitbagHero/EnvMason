@@ -205,6 +205,38 @@ func TestBuildRequiresFreshOfficialEvidenceForPinnedTarget(t *testing.T) {
 	}
 }
 
+func TestBuildExecutableBindsNVMAndDefaultAliasDigests(t *testing.T) {
+	t.Parallel()
+	input := buildFixture()
+	input.Policy.Tools["runtime.node"] = assessment.ToolPolicy{Channel: assessment.ChannelLTS, Pin: "24.2.0"}
+	script := "sha256:" + strings.Repeat("a", 64)
+	alias := "sha256:" + strings.Repeat("b", 64)
+	value, err := BuildExecutable(input, script, alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.SchemaVersion != ExecutableSchemaVersion || !value.Executable || value.Actions[0].Risk != RiskR2 {
+		t.Fatalf("executable Plan = %#v", value)
+	}
+	summary, err := Render(value, FormatSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{script, alias, "exact plan-level confirmation"} {
+		if !strings.Contains(string(summary), expected) {
+			t.Fatalf("summary does not expose %q:\n%s", expected, summary)
+		}
+	}
+	mutated := clonePlan(value)
+	mutated.Actions[0].Preconditions[len(mutated.Actions[0].Preconditions)-1].Expected = "sha256:" + strings.Repeat("c", 64)
+	if err := Validate(mutated); err == nil || !strings.Contains(err.Error(), "Plan ID") {
+		t.Fatalf("mutated precondition = %v", err)
+	}
+	if _, err := BuildExecutable(input, "bad", alias); err == nil {
+		t.Fatal("invalid script digest was accepted")
+	}
+}
+
 func TestGenerateRequiresFreshEligibleRecommendationAndOnlyRenders(t *testing.T) {
 	t.Parallel()
 	input := buildFixture()

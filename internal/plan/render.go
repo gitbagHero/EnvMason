@@ -42,8 +42,20 @@ func renderSummary(value Plan) []byte {
 	for _, action := range value.Actions {
 		fmt.Fprintf(&output, "  %s: %s %s via %s | risk=%s | confirmation=%s | elevation=%t | restart=%t\n", plain(action.ID), plain(action.Operation), plain(action.TargetVersion), plain(action.Adapter), action.Risk, plain(action.Confirmation.Scope), action.ElevationRequired, action.RestartRequired)
 		fmt.Fprintf(&output, "    preconditions: %d | verifications: %d | recovery: %s\n", len(action.Preconditions), len(action.Verifications), plain(action.Recovery.Mode))
+		if value.Executable {
+			for _, check := range action.Preconditions {
+				fmt.Fprintf(&output, "    require %s %s = %s\n", plain(check.Kind), plain(check.Subject), plain(check.Expected))
+			}
+			for _, check := range action.Verifications {
+				fmt.Fprintf(&output, "    verify %s %s = %s\n", plain(check.Kind), plain(check.Subject), plain(check.Expected))
+			}
+		}
 	}
-	fmt.Fprintln(&output, "This I13 preview cannot execute or modify the system.")
+	if value.Executable {
+		fmt.Fprintln(&output, "This executable Plan requires exact plan-level confirmation before any action can run.")
+	} else {
+		fmt.Fprintln(&output, "This I13 preview cannot execute or modify the system.")
+	}
 	return output.Bytes()
 }
 

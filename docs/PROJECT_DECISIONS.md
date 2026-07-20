@@ -223,6 +223,18 @@
 - 决定：I14 操作历史采用本地版本化 JSON，不引入 SQLite。每次状态更新先在同目录写入权限受限的临时文件并安全替换当前记录；macOS 使用 `~/Library/Application Support/EnvMason/operations`，Windows 使用 `%LOCALAPPDATA%/EnvMason/operations`，Linux 使用 `$XDG_STATE_HOME/envmason/operations` 或 `~/.local/state/envmason/operations`。Unix 目录/文件权限分别为 `0700`/`0600`，符号链接目的地被拒绝。
 - 决定：在 I18 前根据历史查询、并发、迁移和 GUI 需求重新评估 SQLite；I14 不提供删除历史的公开入口，后续删除或恢复仍必须遵循对应增量的 Plan 和确认语义。
 
+### D-025：I15 单个 NVM Node 安装接口与固定 Shell 例外
+
+- 状态：Accepted（维护者于 2026-07-17 明确确认推荐方案）
+- 事实依据：[NVM 官方 README](https://github.com/nvm-sh/nvm/blob/master/README.md)说明 `nvm` 是 sourced Shell function 而不是独立可执行文件，正确存在性检查使用 `command -v nvm`；NVM 的[固定版本脚本](https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/nvm.sh)支持 `--no-use`、二进制安装 `-b`、`--skip-default-packages` 和 `--no-progress`。
+- 决定：I15 公开 `envmason apply --tool runtime.node --version <精确稳定版本> --online [--dry-run]`。目标必须高于当前生效版本，并精确存在于本次 fresh Node.js 官方 release index；I13 的 `envmason plan` 继续输出不可执行 Plan `0.1.0`。
+- 决定：dry-run 只在内存中构建并显示 Plan `0.2.0`，不确认、不执行且不创建操作记录。真实 apply 显示同一不可变 Plan，用户必须在交互终端逐字输入 `apply <完整 Plan ID>`；不提供 `--yes`、配置静默授权、环境变量授权或 AI 代确认，错误输入、EOF 和非交互输入均拒绝且不执行。
+- 决定：I15 只公开支持 macOS、已存在且可读取 default alias 的 NVM 和单个 Node 版本安装；不安装 NVM，不修改 default alias，不切换当前 Shell，不升级 npm/pnpm，不删除旧版本，不清理失败残留，也不提权。Linux/Windows 只维持编译和 fixture 兼容，不声明可执行支持。
+- 决定：为 NVM 建立唯一固定 Shell 例外：只调用绝对路径 `/bin/bash --noprofile --norc`，脚本文本编译在内置适配器中，只 source 已确认的 `$NVM_DIR/nvm.sh --no-use` 并执行固定 `nvm install -b --skip-default-packages --no-progress <精确版本>`。目录和版本只作为位置参数传递，Plan、AI 和用户输入均不能提供 Shell 文本、可执行路径或附加参数。
+- 决定：Plan 记录 `nvm.sh` 与 default alias 的 SHA-256；二者必须是非符号链接普通文件，并在确认后、进程启动前重新校验。适配器只传入 HOME、NVM_DIR、固定系统 PATH、临时目录和标准代理变量，不读取 Shell profile，不继承 NVM mirror、认证、第三方 hook、`BASH_ENV`、`NODE_OPTIONS` 或包管理器秘密；主目录、NVM 目录、临时路径和代理值在操作记录中脱敏。
+- 决定：NVM 动作超时为 10 分钟，执行器注册上限扩展为 15 分钟；Unix 取消或超时时终止整个新进程组，避免 curl/tar 后代残留。失败不自动删除部分目录或缓存，因为该清理会形成新的 R3 操作。
+- 决定：Operation Record 当前版本升为 `0.2.0`，记录动作执行前后事实快照、内容 digest、确定性差异和幂等跳过状态；完整保留 `0.1.0` Schema 和读取验证能力。目标已安装时不再次运行 NVM，但仍执行验证并写入新的已确认操作记录。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |

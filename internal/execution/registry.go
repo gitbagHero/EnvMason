@@ -23,6 +23,8 @@ type Definition struct {
 	MinimumRisk plan.Risk
 	Build       func(plan.Action) (CommandSpec, error)
 	Preflight   func(context.Context, plan.Action) error
+	Capture     func(context.Context, plan.Action) (Snapshot, error)
+	Satisfied   func(context.Context, plan.Action) (bool, error)
 	Verify      func(context.Context, plan.Action, ProcessResult) error
 }
 

@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	RecordSchemaVersion = "0.1.0"
-	DefaultOutputLimit  = 64 << 10
-	MaximumTimeout      = 30 * time.Second
+	RecordSchemaVersion         = "0.2.0"
+	PreviousRecordSchemaVersion = "0.1.0"
+	DefaultOutputLimit          = 64 << 10
+	MaximumTimeout              = 15 * time.Minute
 )
 
 type State string
@@ -80,6 +81,22 @@ type StepRecord struct {
 	Verification CheckResult    `json:"verification"`
 	Stdout       CapturedOutput `json:"stdout"`
 	Stderr       CapturedOutput `json:"stderr"`
+	Before       *Snapshot      `json:"before,omitempty"`
+	After        *Snapshot      `json:"after,omitempty"`
+	Diff         []Change       `json:"diff,omitempty"`
+	Skipped      bool           `json:"skipped,omitempty"`
+}
+
+type Snapshot struct {
+	Digest string            `json:"digest"`
+	Facts  map[string]string `json:"facts"`
+}
+
+type Change struct {
+	Key    string `json:"key"`
+	Kind   string `json:"kind"`
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
 }
 
 type Invocation struct {
@@ -116,6 +133,7 @@ type CommandSpec struct {
 	Directory       string
 	Timeout         time.Duration
 	SensitiveValues []string
+	TerminateTree   bool
 }
 
 type ProcessResult struct {

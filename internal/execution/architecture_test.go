@@ -37,7 +37,7 @@ func TestExecutionCapabilityIsConfinedAndNeverInvokesShell(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if name == "os/exec" && path != "runner.go" {
+			if name == "os/exec" && path != "runner.go" && path != "process_unix.go" && path != "process_windows.go" {
 				t.Errorf("%s imports os/exec outside the single runner boundary", path)
 			}
 		}

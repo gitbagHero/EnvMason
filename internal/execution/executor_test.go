@@ -235,6 +235,63 @@ func TestRecoverInterruptedNeverInventsCompletion(t *testing.T) {
 	}
 }
 
+func TestExecutorCapturesStateDiffAndSkipsSatisfiedAction(t *testing.T) {
+	t.Parallel()
+	executor, request, _, runner := testHarness(t, nil)
+	definition, err := executor.Registry.Resolve(request.Plan.Actions[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	captures := 0
+	definition.Capture = func(context.Context, plan.Action) (Snapshot, error) {
+		captures++
+		return NewSnapshot(map[string]string{"target_installed": "true"})
+	}
+	definition.Satisfied = func(context.Context, plan.Action) (bool, error) { return true, nil }
+	executor.Registry, err = NewRegistry(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := executor.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := record.Steps[0]
+	if runner.calls != 0 || captures != 2 || !step.Skipped || step.Before == nil || step.After == nil || len(step.Diff) != 0 {
+		t.Fatalf("idempotent execution = calls %d, captures %d, step %#v", runner.calls, captures, step)
+	}
+}
+
+func TestExecutorRecordsDeterministicBeforeAfterDiff(t *testing.T) {
+	t.Parallel()
+	executor, request, _, _ := testHarness(t, nil)
+	definition, err := executor.Registry.Resolve(request.Plan.Actions[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	captures := 0
+	definition.Capture = func(context.Context, plan.Action) (Snapshot, error) {
+		captures++
+		installed := "false"
+		if captures > 1 {
+			installed = "true"
+		}
+		return NewSnapshot(map[string]string{"target_installed": installed})
+	}
+	executor.Registry, err = NewRegistry(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := executor.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff := record.Steps[0].Diff
+	if len(diff) != 1 || diff[0] != (Change{Key: "target_installed", Kind: "changed", Before: "false", After: "true"}) {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
 func testHarness(t *testing.T, suppliedRunner *fakeRunner) (Executor, Request, *memoryStore, *fakeRunner) {
 	t.Helper()
 	value, err := plan.BuildSelfTest(plan.SelfTestInput{CreatedAt: testBaseTime, OS: "darwin", OSVersion: "26.0", Architecture: "arm64"})

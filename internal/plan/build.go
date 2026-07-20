@@ -96,6 +96,36 @@ func Build(input BuildInput) (Plan, error) {
 	return value, nil
 }
 
+// BuildExecutable converts the deterministic Node/NVM preview into the single
+// executable I15 action and binds it to the exact reviewed nvm.sh bytes.
+func BuildExecutable(input BuildInput, nvmScriptDigest, defaultAliasDigest string) (Plan, error) {
+	if !digestPattern.MatchString(nvmScriptDigest) || !digestPattern.MatchString(defaultAliasDigest) {
+		return Plan{}, errors.New("build executable plan: valid nvm.sh and default alias digests are required")
+	}
+	value, err := Build(input)
+	if err != nil {
+		return Plan{}, err
+	}
+	value.SchemaVersion = ExecutableSchemaVersion
+	value.Executable = true
+	value.Summary = "Install the exact selected Node.js version with the existing NVM installation while retaining active, default, and older versions."
+	value.Actions[0].Preconditions = append(value.Actions[0].Preconditions,
+		Check{Kind: "adapter_script_digest_matches", Subject: "nvm.sh", Expected: nvmScriptDigest},
+		Check{Kind: "default_alias_digest_matches", Subject: "nvm/default", Expected: defaultAliasDigest},
+	)
+	value.Actions[0].Verifications = append(value.Actions[0].Verifications,
+		Check{Kind: "default_alias_digest_matches", Subject: "nvm/default", Expected: defaultAliasDigest},
+	)
+	value.ID, err = planID(value)
+	if err != nil {
+		return Plan{}, fmt.Errorf("build executable plan: calculate ID: %w", err)
+	}
+	if err := Validate(value); err != nil {
+		return Plan{}, err
+	}
+	return value, nil
+}
+
 func summarizeEnvironment(value inventory.Inventory, candidate assessment.UpdateCandidate) (EnvironmentSummary, bool, error) {
 	for _, tool := range value.Tools {
 		if tool.ID != "runtime.node" {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -48,10 +49,42 @@ func TestExecutionHelperProcess(t *testing.T) {
 		process, _ := os.FindProcess(os.Getpid())
 		_ = process.Kill()
 		time.Sleep(time.Second)
+	case "tree-parent":
+		command := exec.Command(os.Args[0], "-test.run=^TestExecutionHelperProcess$", "--", "tree-child", arguments[1])
+		command.Env = []string{"GO_WANT_EXECUTION_HELPER=1"}
+		if err := command.Start(); err != nil {
+			os.Exit(96)
+		}
+		_ = command.Wait()
+	case "tree-child":
+		time.Sleep(200 * time.Millisecond)
+		if err := os.WriteFile(arguments[1], []byte("survived"), 0o600); err != nil {
+			os.Exit(95)
+		}
 	default:
 		os.Exit(98)
 	}
 	os.Exit(0)
+}
+
+func TestOSRunnerTerminatesUnixProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows I15 execution is unsupported")
+	}
+	t.Parallel()
+	marker := filepath.Join(t.TempDir(), "descendant-survived")
+	spec := helperSpec(helperExecutable(t), "tree-parent")
+	spec.Args = append(spec.Args, marker)
+	spec.Timeout = 30 * time.Millisecond
+	spec.TerminateTree = true
+	result := (OSRunner{}).Run(t.Context(), spec)
+	if result.Failure == nil || result.Failure.Code != CodeTimeout {
+		t.Fatalf("timeout = %#v", result)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("descendant was not terminated: %v", err)
+	}
 }
 
 func TestOSRunnerSuccessAndNonZeroExit(t *testing.T) {

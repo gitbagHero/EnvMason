@@ -31,6 +31,7 @@ func (runner OSRunner) Run(ctx context.Context, spec CommandSpec) ProcessResult 
 	command.Dir = spec.Directory
 	command.Stdout = stdout
 	command.Stderr = stderr
+	configureProcessTree(command, spec.TerminateTree)
 
 	err := command.Run()
 	result := ProcessResult{Stdout: stdout.Output(), Stderr: stderr.Output()}

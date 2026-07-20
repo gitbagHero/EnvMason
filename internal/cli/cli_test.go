@@ -6,8 +6,11 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	applypkg "github.com/gitbagHero/EnvMason/internal/apply"
 	"github.com/gitbagHero/EnvMason/internal/buildinfo"
+	"github.com/gitbagHero/EnvMason/internal/execution"
 	planpkg "github.com/gitbagHero/EnvMason/internal/plan"
 	"github.com/gitbagHero/EnvMason/internal/report"
 )
@@ -40,7 +43,7 @@ func TestHelpEntryPoints(t *testing.T) {
 			if stderr != "" {
 				t.Fatalf("stderr = %q, want empty", stderr)
 			}
-			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan"} {
+			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan", "apply"} {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("stdout does not contain %q:\n%s", want, stdout)
 				}
@@ -53,6 +56,110 @@ func TestHelpEntryPoints(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyDryRunReviewsPlanWithoutConfirmationOrExecution(t *testing.T) {
+	prepared := applyPreparedForCLI(t)
+	confirmed, executed := 0, 0
+	deps := commandDependencies{
+		prepareApply: func(context.Context, applypkg.Options) (applypkg.Prepared, error) { return prepared, nil },
+		confirmApply: func(string) (execution.ConfirmationReceipt, error) {
+			confirmed++
+			return execution.ConfirmationReceipt{}, nil
+		},
+		executeApply: func(context.Context, applypkg.Prepared, execution.ConfirmationReceipt) (applypkg.Result, error) {
+			executed++
+			return applypkg.Result{}, nil
+		},
+	}
+	code, stdout, stderr := executeForTestWithDependencies([]string{"apply", "--tool", "runtime.node", "--version", "24.14.0", "--online", "--dry-run"}, deps)
+	if code != ExitSuccess || stderr != "" || confirmed != 0 || executed != 0 || !strings.Contains(stdout, "Executable: true") || !strings.Contains(stdout, "Dry run complete") {
+		t.Fatalf("dry run = %d/%q/%q, confirmed %d, executed %d", code, stdout, stderr, confirmed, executed)
+	}
+}
+
+func TestApplyRequiresExactPlanBoundConfirmation(t *testing.T) {
+	prepared := applyPreparedForCLI(t)
+	executed := 0
+	deps := commandDependencies{
+		prepareApply: func(context.Context, applypkg.Options) (applypkg.Prepared, error) { return prepared, nil },
+		confirmApply: func(id string) (execution.ConfirmationReceipt, error) {
+			if id != prepared.Plan.ID {
+				t.Fatalf("confirmation ID = %s", id)
+			}
+			return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: id, ConfirmedAt: prepared.Plan.CreatedAt.Add(time.Second)}, nil
+		},
+		executeApply: func(_ context.Context, got applypkg.Prepared, receipt execution.ConfirmationReceipt) (applypkg.Result, error) {
+			executed++
+			if got.Plan.ID != prepared.Plan.ID || receipt.ConfirmedPlanID != prepared.Plan.ID {
+				t.Fatal("execution was not Plan-bound")
+			}
+			return applypkg.Result{Record: execution.Record{ID: "op-00000000000000000000000000000001"}, RecordPath: "/tmp/op.json"}, nil
+		},
+	}
+	code, stdout, stderr := executeForTestWithDependencies([]string{"apply", "--tool", "runtime.node", "--version", "24.14.0", "--online"}, deps)
+	if code != ExitSuccess || stderr != "" || executed != 1 || !strings.Contains(stdout, "Type 'apply "+prepared.Plan.ID+"'") || !strings.Contains(stdout, "completed and verified") {
+		t.Fatalf("apply = %d/%q/%q, executed %d", code, stdout, stderr, executed)
+	}
+}
+
+func TestApplyRejectionAndUnsafeFlagsNeverExecute(t *testing.T) {
+	prepared := applyPreparedForCLI(t)
+	executed := 0
+	deps := commandDependencies{
+		prepareApply: func(context.Context, applypkg.Options) (applypkg.Prepared, error) { return prepared, nil },
+		confirmApply: func(string) (execution.ConfirmationReceipt, error) {
+			return execution.ConfirmationReceipt{}, errors.New("Plan was not confirmed; no action was executed")
+		},
+		executeApply: func(context.Context, applypkg.Prepared, execution.ConfirmationReceipt) (applypkg.Result, error) {
+			executed++
+			return applypkg.Result{}, nil
+		},
+	}
+	code, _, stderr := executeForTestWithDependencies([]string{"apply", "--tool", "runtime.node", "--version", "24.14.0", "--online"}, deps)
+	if code != ExitFailure || executed != 0 || !strings.Contains(stderr, "not confirmed") {
+		t.Fatalf("rejection = %d/%q, executed %d", code, stderr, executed)
+	}
+	code, _, stderr = executeForTestWithDependencies([]string{"apply", "--tool", "runtime.node", "--version", "24.14.0", "--online", "--yes"}, deps)
+	if code != ExitUsage || executed != 0 || !strings.Contains(stderr, "unknown flag: --yes") {
+		t.Fatalf("unsafe flag = %d/%q, executed %d", code, stderr, executed)
+	}
+}
+
+func TestApplyRejectsMissingOnlineAndUnsupportedToolBeforePreparation(t *testing.T) {
+	preparedCalls := 0
+	deps := commandDependencies{
+		prepareApply: func(context.Context, applypkg.Options) (applypkg.Prepared, error) {
+			preparedCalls++
+			return applypkg.Prepared{}, nil
+		},
+		executeApply: func(context.Context, applypkg.Prepared, execution.ConfirmationReceipt) (applypkg.Result, error) {
+			return applypkg.Result{}, nil
+		},
+		confirmApply: func(string) (execution.ConfirmationReceipt, error) { return execution.ConfirmationReceipt{}, nil },
+	}
+	for _, args := range [][]string{
+		{"apply", "--tool", "runtime.node", "--version", "24.14.0"},
+		{"apply", "--tool", "runtime.java", "--version", "24.14.0", "--online"},
+		{"apply", "--tool", "runtime.node", "--online"},
+	} {
+		code, _, _ := executeForTestWithDependencies(args, deps)
+		if code != ExitUsage {
+			t.Fatalf("usage %q = %d", args, code)
+		}
+	}
+	if preparedCalls != 0 {
+		t.Fatalf("prepare called %d times", preparedCalls)
+	}
+}
+
+func applyPreparedForCLI(t *testing.T) applypkg.Prepared {
+	t.Helper()
+	value, err := planpkg.BuildSelfTest(planpkg.SelfTestInput{CreatedAt: time.Date(2026, 7, 17, 10, 0, 0, 0, time.UTC), OS: "darwin", OSVersion: "15.0", Architecture: "arm64"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return applypkg.Prepared{Plan: value}
 }
 
 func TestPlanCommandPassesOnlyConfirmedPreviewOptions(t *testing.T) {

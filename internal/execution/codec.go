@@ -19,8 +19,8 @@ var planIDPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
 var compiledRecordSchema = struct {
 	sync.Mutex
-	value *jsonschema.Schema
-}{}
+	values map[string]*jsonschema.Schema
+}{values: map[string]*jsonschema.Schema{}}
 
 func MarshalRecord(value Record) ([]byte, error) {
 	if err := ValidateRecord(value); err != nil {
@@ -63,10 +63,10 @@ func ValidateRecordJSON(data []byte) error {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return fmt.Errorf("parse operation record JSON: %w", err)
 	}
-	if envelope.SchemaVersion != RecordSchemaVersion {
+	if envelope.SchemaVersion != RecordSchemaVersion && envelope.SchemaVersion != PreviousRecordSchemaVersion {
 		return fmt.Errorf("validate operation record JSON: unsupported schema_version %q", envelope.SchemaVersion)
 	}
-	schema, err := recordSchema()
+	schema, err := recordSchema(envelope.SchemaVersion)
 	if err != nil {
 		return fmt.Errorf("compile operation record schema: %w", err)
 	}
@@ -81,7 +81,7 @@ func ValidateRecordJSON(data []byte) error {
 }
 
 func ValidateRecord(value Record) error {
-	if value.SchemaVersion != RecordSchemaVersion || !operationIDPattern.MatchString(value.ID) || !planIDPattern.MatchString(value.PlanID) || value.PlanSchemaVersion == "" {
+	if (value.SchemaVersion != RecordSchemaVersion && value.SchemaVersion != PreviousRecordSchemaVersion) || !operationIDPattern.MatchString(value.ID) || !planIDPattern.MatchString(value.PlanID) || value.PlanSchemaVersion == "" {
 		return errors.New("validate operation record: identity is incomplete")
 	}
 	if value.CreatedAt.IsZero() || value.UpdatedAt.Before(value.CreatedAt) || len(value.Steps) == 0 || len(value.Transitions) == 0 {
@@ -107,6 +107,26 @@ func ValidateRecord(value Record) error {
 		}
 		if terminalState(step.State) && step.FinishedAt == nil {
 			return errors.New("validate operation record: terminal step has no finish time")
+		}
+		if value.SchemaVersion == PreviousRecordSchemaVersion && (step.Before != nil || step.After != nil || len(step.Diff) > 0 || step.Skipped) {
+			return errors.New("validate operation record: 0.1.0 cannot contain state snapshots")
+		}
+		for _, snapshot := range []*Snapshot{step.Before, step.After} {
+			if snapshot == nil {
+				continue
+			}
+			expected, err := NewSnapshot(snapshot.Facts)
+			if err != nil || snapshot.Digest != expected.Digest {
+				return errors.New("validate operation record: snapshot digest does not match facts")
+			}
+		}
+		if step.Before != nil && step.After != nil {
+			expected := DiffSnapshots(*step.Before, *step.After)
+			if !changesEqual(step.Diff, expected) {
+				return errors.New("validate operation record: snapshot diff does not match facts")
+			}
+		} else if len(step.Diff) > 0 {
+			return errors.New("validate operation record: diff requires before and after snapshots")
 		}
 	}
 	if !validState(value.State) || (value.StartedAt != nil && value.FinishedAt != nil && value.FinishedAt.Before(*value.StartedAt)) {
@@ -161,15 +181,15 @@ func validTransition(from, to State) bool {
 	}
 }
 
-func recordSchema() (*jsonschema.Schema, error) {
+func recordSchema(version string) (*jsonschema.Schema, error) {
 	compiledRecordSchema.Lock()
 	defer compiledRecordSchema.Unlock()
-	if compiledRecordSchema.value != nil {
-		return compiledRecordSchema.value, nil
+	if schema := compiledRecordSchema.values[version]; schema != nil {
+		return schema, nil
 	}
-	data, id, ok := operationschema.ByVersion(RecordSchemaVersion)
+	data, id, ok := operationschema.ByVersion(version)
 	if !ok {
-		return nil, fmt.Errorf("unsupported schema_version %q", RecordSchemaVersion)
+		return nil, fmt.Errorf("unsupported schema_version %q", version)
 	}
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
@@ -185,6 +205,18 @@ func recordSchema() (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	compiledRecordSchema.value = schema
+	compiledRecordSchema.values[version] = schema
 	return schema, nil
+}
+
+func changesEqual(left, right []Change) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

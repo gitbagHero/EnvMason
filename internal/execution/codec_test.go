@@ -16,7 +16,7 @@ func TestOperationCodecRejectsUnknownFieldsTrailingJSONAndFalseCompletion(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	unknown := bytes.Replace(data, []byte(`"schema_version": "0.1.0"`), []byte(`"schema_version": "0.1.0", "unknown": true`), 1)
+	unknown := bytes.Replace(data, []byte(`"schema_version": "0.2.0"`), []byte(`"schema_version": "0.2.0", "unknown": true`), 1)
 	if _, err := DecodeRecord(unknown); err == nil {
 		t.Fatal("unknown field was accepted")
 	}
@@ -36,6 +36,24 @@ func TestOperationCodecRejectsUnknownFieldsTrailingJSONAndFalseCompletion(t *tes
 	illegalTransition.FinishedAt = nil
 	if _, err := MarshalRecord(illegalTransition); err == nil {
 		t.Fatal("transition out of terminal Completed was accepted")
+	}
+}
+
+func TestOperationCodecRetainsVersionZeroOneReadCompatibility(t *testing.T) {
+	t.Parallel()
+	executor, request, _, _ := testHarness(t, nil)
+	record, err := executor.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.SchemaVersion = PreviousRecordSchemaVersion
+	data, err := MarshalRecord(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeRecord(data)
+	if err != nil || decoded.SchemaVersion != PreviousRecordSchemaVersion {
+		t.Fatalf("decode 0.1.0 = %#v, %v", decoded, err)
 	}
 }
 
