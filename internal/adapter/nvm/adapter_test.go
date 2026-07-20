@@ -181,6 +181,24 @@ func TestInspectBoundsScriptAndAliasFiles(t *testing.T) {
 	}
 }
 
+func TestInspectDefaultAddsCanonicalResolvedAliasWithoutNarrowingInstallInspect(t *testing.T) {
+	t.Parallel()
+	baseline := fixtureNVM(t, false)
+	resolved, err := InspectDefault(baseline.Directory, baseline.ActiveVersion)
+	if err != nil || resolved.DefaultAlias != "22" || resolved.DefaultVersion != "v22.0.0" {
+		t.Fatalf("default inspection = %#v, %v", resolved, err)
+	}
+	if err := os.WriteFile(filepath.Join(baseline.Directory, "alias", "default"), []byte("unresolved\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Inspect(baseline.Directory, baseline.ActiveVersion); err != nil {
+		t.Fatalf("I15 digest-only inspection was narrowed: %v", err)
+	}
+	if _, err := InspectDefault(baseline.Directory, baseline.ActiveVersion); err == nil {
+		t.Fatal("I16 accepted an unresolved default alias")
+	}
+}
+
 func fixtureNVM(t *testing.T, fail bool) Baseline {
 	t.Helper()
 	directory := t.TempDir()

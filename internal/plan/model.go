@@ -6,9 +6,10 @@ package plan
 import "time"
 
 const (
-	SchemaVersion           = "0.1.0"
-	ExecutableSchemaVersion = "0.2.0"
-	DefaultTTL              = 30 * time.Minute
+	SchemaVersion                   = "0.1.0"
+	ExecutableSchemaVersion         = "0.2.0"
+	HighRiskExecutableSchemaVersion = "0.3.0"
+	DefaultTTL                      = 30 * time.Minute
 )
 
 type Risk string

@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -10,7 +12,9 @@ import (
 
 	applypkg "github.com/gitbagHero/EnvMason/internal/apply"
 	"github.com/gitbagHero/EnvMason/internal/buildinfo"
+	defaultpkg "github.com/gitbagHero/EnvMason/internal/defaultversion"
 	"github.com/gitbagHero/EnvMason/internal/execution"
+	"github.com/gitbagHero/EnvMason/internal/inventory"
 	planpkg "github.com/gitbagHero/EnvMason/internal/plan"
 	"github.com/gitbagHero/EnvMason/internal/report"
 )
@@ -43,7 +47,7 @@ func TestHelpEntryPoints(t *testing.T) {
 			if stderr != "" {
 				t.Fatalf("stderr = %q, want empty", stderr)
 			}
-			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan", "apply"} {
+			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan", "apply", "default"} {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("stdout does not contain %q:\n%s", want, stdout)
 				}
@@ -56,6 +60,134 @@ func TestHelpEntryPoints(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDefaultSetDryRunAndExplicitR3Confirmation(t *testing.T) {
+	prepared := defaultPreparedForCLI(t, "set_default")
+	confirmed, executed := 0, 0
+	deps := commandDependencies{
+		prepareDefaultSet: func(context.Context, defaultpkg.SetOptions) (defaultpkg.Prepared, error) { return prepared, nil },
+		confirmDefault: func(phrase, id string) (execution.ConfirmationReceipt, error) {
+			confirmed++
+			if phrase != "set-default" || id != prepared.Plan.ID {
+				t.Fatalf("confirmation = %q/%q", phrase, id)
+			}
+			return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: id, ConfirmedAt: prepared.Plan.CreatedAt.Add(time.Second)}, nil
+		},
+		executeDefault: func(context.Context, defaultpkg.Prepared, execution.ConfirmationReceipt) (defaultpkg.Result, error) {
+			executed++
+			return defaultpkg.Result{Record: execution.Record{ID: "op-00000000000000000000000000000001"}}, nil
+		},
+	}
+	code, stdout, stderr := executeForTestWithDependencies([]string{"default", "set", "--tool", "runtime.node", "--version", "24.14.0", "--dry-run"}, deps)
+	if code != ExitSuccess || stderr != "" || confirmed != 0 || executed != 0 || !strings.Contains(stdout, "risk=R3") || !strings.Contains(stdout, "Dry run complete") {
+		t.Fatalf("default dry run = %d/%q/%q confirmed=%d executed=%d", code, stdout, stderr, confirmed, executed)
+	}
+	code, stdout, stderr = executeForTestWithDependencies([]string{"default", "set", "--tool", "runtime.node", "--version", "24.14.0"}, deps)
+	if code != ExitSuccess || stderr != "" || confirmed != 1 || executed != 1 || !strings.Contains(stdout, "Type 'set-default "+prepared.Plan.ID+"'") {
+		t.Fatalf("default set = %d/%q/%q confirmed=%d executed=%d", code, stdout, stderr, confirmed, executed)
+	}
+}
+
+func TestDefaultRestoreUsesNewExplicitPlanConfirmation(t *testing.T) {
+	prepared := defaultPreparedForCLI(t, "restore_default")
+	confirmed, executed := 0, 0
+	deps := commandDependencies{
+		prepareDefaultRestore: func(_ context.Context, options defaultpkg.RestoreOptions) (defaultpkg.Prepared, error) {
+			if options.OperationID != "op-00000000000000000000000000000001" {
+				t.Fatalf("restore options = %#v", options)
+			}
+			return prepared, nil
+		},
+		confirmDefault: func(phrase, id string) (execution.ConfirmationReceipt, error) {
+			confirmed++
+			if phrase != "restore-default" || id != prepared.Plan.ID {
+				t.Fatalf("confirmation = %q/%q", phrase, id)
+			}
+			return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: id, ConfirmedAt: prepared.Plan.CreatedAt.Add(time.Second)}, nil
+		},
+		executeDefault: func(context.Context, defaultpkg.Prepared, execution.ConfirmationReceipt) (defaultpkg.Result, error) {
+			executed++
+			return defaultpkg.Result{Record: execution.Record{ID: "op-00000000000000000000000000000002"}}, nil
+		},
+	}
+	code, stdout, stderr := executeForTestWithDependencies([]string{"default", "restore", "--operation", "op-00000000000000000000000000000001"}, deps)
+	if code != ExitSuccess || stderr != "" || confirmed != 1 || executed != 1 || !strings.Contains(stdout, "Type 'restore-default "+prepared.Plan.ID+"'") {
+		t.Fatalf("default restore = %d/%q/%q confirmed=%d executed=%d", code, stdout, stderr, confirmed, executed)
+	}
+}
+
+func TestDefaultUnsafeUsageAndFailureRecoverySuggestion(t *testing.T) {
+	prepared := defaultPreparedForCLI(t, "set_default")
+	before, _ := execution.NewSnapshot(map[string]string{"default_alias_hash": "sha256:" + strings.Repeat("a", 64)})
+	after, _ := execution.NewSnapshot(map[string]string{"default_alias_hash": "sha256:" + strings.Repeat("b", 64)})
+	executed := 0
+	deps := commandDependencies{
+		prepareDefaultSet: func(context.Context, defaultpkg.SetOptions) (defaultpkg.Prepared, error) { return prepared, nil },
+		confirmDefault: func(_, id string) (execution.ConfirmationReceipt, error) {
+			return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: id, ConfirmedAt: prepared.Plan.CreatedAt.Add(time.Second)}, nil
+		},
+		executeDefault: func(context.Context, defaultpkg.Prepared, execution.ConfirmationReceipt) (defaultpkg.Result, error) {
+			executed++
+			return defaultpkg.Result{Record: execution.Record{ID: "op-00000000000000000000000000000001", Steps: []execution.StepRecord{{Before: &before, After: &after}}}}, errors.New("verification failed")
+		},
+	}
+	code, stdout, stderr := executeForTestWithDependencies([]string{"default", "set", "--tool", "runtime.node", "--version", "24.14.0"}, deps)
+	if code != ExitFailure || executed != 1 || !strings.Contains(stdout, "default restore --operation op-00000000000000000000000000000001 --dry-run") || !strings.Contains(stderr, "verification failed") {
+		t.Fatalf("failed default set = %d/%q/%q executed=%d", code, stdout, stderr, executed)
+	}
+	code, _, stderr = executeForTestWithDependencies([]string{"default", "set", "--tool", "runtime.node", "--version", "24.14.0", "--yes"}, deps)
+	if code != ExitUsage || executed != 1 || !strings.Contains(stderr, "unknown flag: --yes") {
+		t.Fatalf("unsafe default flag = %d/%q executed=%d", code, stderr, executed)
+	}
+	for _, args := range [][]string{
+		{"default", "set", "--tool", "runtime.java", "--version", "24.14.0"},
+		{"default", "set", "--tool", "runtime.node", "--version", "lts/*"},
+		{"default", "restore", "--operation", "bad"},
+	} {
+		code, _, _ := executeForTestWithDependencies(args, deps)
+		if code != ExitUsage {
+			t.Fatalf("unsafe usage %q = %d", args, code)
+		}
+	}
+}
+
+func defaultPreparedForCLI(t *testing.T, operation string) defaultpkg.Prepared {
+	t.Helper()
+	createdAt := time.Date(2026, 7, 20, 8, 0, 0, 0, time.UTC)
+	inventoryValue := inventory.Inventory{
+		SchemaVersion: inventory.SchemaVersion, GeneratedAt: createdAt,
+		System: inventory.System{OS: inventory.OSMacOS, OSVersion: "15.0", Architecture: inventory.ArchitectureARM64},
+		Tools: []inventory.Tool{{ID: "runtime.node", Installations: []inventory.Installation{
+			{ID: "node-22", Version: "v22.0.0", Path: "$HOME/.nvm/versions/node/v22.0.0/bin/node", Manager: "nvm", ActiveState: inventory.ActiveStateActive, DefaultState: inventory.DefaultStateDefault},
+			{ID: "node-24", Version: "v24.14.0", Path: "$HOME/.nvm/versions/node/v24.14.0/bin/node", Manager: "nvm", ActiveState: inventory.ActiveStateInactive, DefaultState: inventory.DefaultStateNonDefault},
+		}}},
+	}
+	digest22 := aliasDigestForCLI("22")
+	var value planpkg.Plan
+	var err error
+	if operation == "set_default" {
+		value, err = planpkg.BuildDefaultSet(planpkg.DefaultSetInput{
+			Inventory: inventoryValue, CreatedAt: createdAt, TargetVersion: "24.14.0", ScriptDigest: "sha256:" + strings.Repeat("a", 64),
+			CurrentAliasDigest: digest22, CurrentAlias: "22", CurrentDefaultVersion: "v22.0.0",
+		})
+	} else {
+		value, err = planpkg.BuildDefaultRestore(planpkg.DefaultRestoreInput{
+			Inventory: inventoryValue, CreatedAt: createdAt, ScriptDigest: "sha256:" + strings.Repeat("a", 64),
+			CurrentAliasDigest: aliasDigestForCLI("v24.14.0"), CurrentAlias: "v24.14.0", CurrentDefaultVersion: "v24.14.0",
+			OriginalAliasDigest: digest22, OriginalAlias: "22", OriginalDefaultVersion: "v22.0.0",
+			SourceOperationID: "op-00000000000000000000000000000001", SourcePlanID: "sha256:" + strings.Repeat("b", 64),
+		})
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return defaultpkg.Prepared{Plan: value}
+}
+
+func aliasDigestForCLI(value string) string {
+	digest := sha256.Sum256([]byte(value + "\n"))
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 func TestApplyDryRunReviewsPlanWithoutConfirmationOrExecution(t *testing.T) {

@@ -201,8 +201,8 @@ func validateRequest(request Request, now time.Time) error {
 	if err := plan.Validate(request.Plan); err != nil {
 		return executionError(CodePlanInvalid, "plan failed immutable content validation")
 	}
-	if request.Plan.SchemaVersion != plan.ExecutableSchemaVersion || !request.Plan.Executable {
-		return executionError(CodePlanInvalid, "only executable Plan 0.2.0 is accepted")
+	if (request.Plan.SchemaVersion != plan.ExecutableSchemaVersion && request.Plan.SchemaVersion != plan.HighRiskExecutableSchemaVersion) || !request.Plan.Executable {
+		return executionError(CodePlanInvalid, "only executable Plan 0.2.0 or 0.3.0 is accepted")
 	}
 	if !now.Before(request.Plan.ExpiresAt) {
 		return executionError(CodePlanExpired, "plan has expired")

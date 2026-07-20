@@ -235,6 +235,16 @@
 - 决定：NVM 动作超时为 10 分钟，执行器注册上限扩展为 15 分钟；Unix 取消或超时时终止整个新进程组，避免 curl/tar 后代残留。失败不自动删除部分目录或缓存，因为该清理会形成新的 R3 操作。
 - 决定：Operation Record 当前版本升为 `0.2.0`，记录动作执行前后事实快照、内容 digest、确定性差异和幂等跳过状态；完整保留 `0.1.0` Schema 和读取验证能力。目标已安装时不再次运行 NVM，但仍执行验证并写入新的已确认操作记录。
 
+### D-026：I16 Node 默认版本切换与恢复契约
+
+- 状态：Accepted（维护者于 2026-07-20 明确确认推荐方案）
+- 事实依据：[NVM 官方 README](https://github.com/nvm-sh/nvm/blob/master/README.md#set-default-node-version)定义 `nvm alias default <version>` 为新 Shell 的默认 Node 选择；NVM 是按用户、按 Shell 加载的 sourced function，实际新 Shell 效果依赖 profile 正确加载 `nvm.sh`。
+- 决定：本批次只实施 I16，不进入 I17。公开 `envmason default set --tool runtime.node --version <已安装精确版本> [--dry-run]` 与 `envmason default restore --operation <Operation ID> [--dry-run]`；不要求联网，不安装目标或 NVM。
+- 决定：新增 Plan Schema `0.3.0`，只允许单个 Node/NVM `set_default` 或 `restore_default` R3 Action，不提权、不下载。完整保留 `0.2.0` 和 `0.1.0`。设置和恢复分别要求逐字输入 `set-default <完整 Plan ID>` 和 `restore-default <完整 Plan ID>`；单动作 Plan 的计划级确认即为该 R3 动作的显式逐项确认。
+- 决定：将 D-025 的固定 NVM Shell 例外扩展到 default alias 动作。只运行内置固定脚本、绝对路径 `/bin/bash --noprofile --norc`、已校验 digest 的 `nvm.sh` 和位置参数；不接受用户或 AI 提供的 Shell 文本、路径或附加参数，不读取 Shell profile。
+- 决定：默认 alias 只接受 NVM 规范单行格式；设置目标固定为 `vX.Y.Z`，不使用会漂移的 `node`、主版本或次版本前缀。执行前重新扫描并校验 Inventory、`nvm.sh` 和 alias digest；动作后验证 alias 值、解析版本、目标可执行性、当前 Shell 版本未变及隔离新 Shell 默认版本。
+- 决定：Operation Record 继续使用 `0.2.0`，快照记录原/新 alias、解析版本和 digest。验证失败不自动回滚；恢复必须从源记录生成新 Plan ID 并再次 R3 确认。当前 alias 与源操作的 after 快照不一致时拒绝覆盖；不支持自动、AI 或配置无人值守恢复。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -535,3 +545,21 @@
 - 远程检查：[I15 分支 CI #40](https://github.com/gitbagHero/EnvMason/actions/runs/29721966589) 与 [main CI #41](https://github.com/gitbagHero/EnvMason/actions/runs/29722093239) 均通过 Ubuntu、macOS、Windows × Go 1.25/1.26 六任务矩阵。
 - N/A：I15 不安装 NVM，不修改 default alias，不切换当前 Shell，不升级 npm/Corepack/pnpm，不卸载或清理旧 Node，不提权，不支持无人值守确认，也不开放 Linux/Windows apply。
 - 结论：I15 已依据维护者明确方案和预授权完成验收并进入 `main`；当前停在 I16 之前，未实现默认版本切换。
+
+## I16 验收记录
+
+- 增量：I16 Node 默认版本切换
+- 开始、完成与本地检查日期：2026-07-20
+- 客观检查状态：本地 Passed；远程 CI 待首次提交后验证
+- 维护者决策状态：D-026 接口、公开 Schema 和安全边界已明确确认；最终验收待远程 CI 通过
+- 接口检查：公开 `envmason default set --tool runtime.node --version <已安装精确版本> [--dry-run]` 与 `envmason default restore --operation <Operation ID> [--dry-run]`。未安装目标、未知工具、浮动版本、非法 Operation ID 和未定义的 `--yes` 在写入前拒绝；不需要联网。
+- Plan 与确认检查：Plan Schema `0.3.0` 只允许单个 Node/NVM `set_default` 或 `restore_default` R3 Action，下载为 0、无依赖、不提权；`0.2.0` 和 `0.1.0` 保持验证能力。set/restore 分别只接受 `set-default <完整 Plan ID>` 和 `restore-default <完整 Plan ID>`，错误确认、非交互输入、过期、内容变更和环境漂移均不执行。
+- 设置检查：fixture 验证仅将规范 default alias 从 `22` 改为 `v24.14.0`；目标和原默认版本都必须是可执行 NVM 安装。当前 Shell Node 保持 v22，隔离新 Shell 选择 v24.14.0；重新生成的相同目标 Plan 幂等跳过写动作但仍验证并记录。
+- 恢复检查：Operation Record `0.2.0` 的 before/after 快照记录 alias、解析版本、digest、已安装版本和当前 Shell 版本。新恢复 Plan 绑定源 Operation/Plan ID 和 after digest，可将 `v24.14.0` 恢复为 `22`；外部 alias 变更时拒绝覆盖。
+- 失败路径检查：dry-run 不修改 alias 或创建操作记录；错误确认和确认后漂移无写入。隔离 Shell 验证失败记为 Failed 并输出恢复建议，不自动回滚；失败记录可生成并显式确认恢复 Plan。
+- 固定适配器检查：只使用 `/bin/bash --noprofile --norc`、内置脚本、摘要绑定的 `nvm.sh` 和位置参数运行 `nvm alias default`；不读取用户 Shell profile，不接收 Shell 文本或附加参数。I16 专用 `InspectDefault` 的严格 alias 解析未收紧 I15 原有 digest-only 安装契约。
+- 真实 NVM 和本机只读检查：一次性临时 NVM 目录直接使用本机真实 `nvm.sh`，完成 `v22.0.0 → v24.14.0 → v22.0.0`，源 NVM 未修改。真实 CLI dry-run 正确识别宿主 `node → v26.5.0`，非交互真实执行返回 1，宿主 alias 仍为 `node` 且未新增操作记录。
+- 稳定性检查：全量 race 首轮暴露 Unix 进程组取消与后代 fork 的时序竞争；取消器在有限 100 ms 内重复向同一进程组发送 SIGKILL。目标 race 测试连续 10 次与后续全量 race 均通过。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` I16 核心测试以及 Linux/Windows amd64 目标构建均通过。
+- N/A：I16 不安装或升级 NVM/Node/npm/Corepack/pnpm，不卸载或清理任何版本，不修改 Shell profile，不切换当前 Shell，不提权，不提供无人值守确认或自动回滚，不进入 I17。
+- 结论：I16 本地实现与客观验收已通过；待远程 CI 通过后依据维护者明确决策和 D-014 预授权标记 Accepted。本批次到 I16 结束，不自动进入 I17。

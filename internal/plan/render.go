@@ -52,7 +52,11 @@ func renderSummary(value Plan) []byte {
 		}
 	}
 	if value.Executable {
-		fmt.Fprintln(&output, "This executable Plan requires exact plan-level confirmation before any action can run.")
+		if value.SchemaVersion == HighRiskExecutableSchemaVersion {
+			fmt.Fprintln(&output, "This single-action R3 Plan requires explicit confirmation bound to this exact Plan ID.")
+		} else {
+			fmt.Fprintln(&output, "This executable Plan requires exact plan-level confirmation before any action can run.")
+		}
 	} else {
 		fmt.Fprintln(&output, "This I13 preview cannot execute or modify the system.")
 	}

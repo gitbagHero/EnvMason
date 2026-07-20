@@ -12,9 +12,10 @@ import (
 var digestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
+var operationIDPattern = regexp.MustCompile(`^op-[a-f0-9]{32}$`)
 
 func Validate(value Plan) error {
-	if value.SchemaVersion != SchemaVersion && value.SchemaVersion != ExecutableSchemaVersion {
+	if value.SchemaVersion != SchemaVersion && value.SchemaVersion != ExecutableSchemaVersion && value.SchemaVersion != HighRiskExecutableSchemaVersion {
 		return fmt.Errorf("validate plan: unsupported schema_version %q", value.SchemaVersion)
 	}
 	if !digestPattern.MatchString(value.ID) || !digestPattern.MatchString(value.EnvironmentDigest) || !digestPattern.MatchString(value.PolicyDigest) {
@@ -29,8 +30,14 @@ func Validate(value Plan) error {
 	if value.SchemaVersion == ExecutableSchemaVersion && !value.Executable {
 		return errors.New("validate plan: Plan 0.2.0 must be executable")
 	}
+	if value.SchemaVersion == HighRiskExecutableSchemaVersion && !value.Executable {
+		return errors.New("validate plan: Plan 0.3.0 must be executable")
+	}
 	if strings.TrimSpace(value.Summary) == "" || len(value.Actions) == 0 {
 		return errors.New("validate plan: summary and actions are required")
+	}
+	if value.SchemaVersion == HighRiskExecutableSchemaVersion && len(value.Actions) != 1 {
+		return errors.New("validate plan: Plan 0.3.0 requires exactly one R3 action")
 	}
 	if err := validateEnvironment(value.Environment, value.EnvironmentDigest); err != nil {
 		return err
@@ -117,6 +124,12 @@ func validateAction(schemaVersion string, action Action) error {
 		!identifierPattern.MatchString(action.Adapter) || strings.TrimSpace(action.TargetVersion) == "" {
 		return errors.New("invalid declarative action identity or target")
 	}
+	if schemaVersion == HighRiskExecutableSchemaVersion {
+		if action.ToolID != "runtime.node" || action.Adapter != "nvm" ||
+			(action.Operation != "set_default" && action.Operation != "restore_default") || !exactStableVersion(action.TargetVersion) {
+			return errors.New("Plan 0.3.0 only permits exact Node/NVM default actions")
+		}
+	}
 	if !validRisk(action.Risk) {
 		return fmt.Errorf("unknown risk %q", action.Risk)
 	}
@@ -126,11 +139,14 @@ func validateAction(schemaVersion string, action Action) error {
 	if schemaVersion == ExecutableSchemaVersion && action.Risk != RiskR1 && action.Risk != RiskR2 {
 		return errors.New("Plan 0.2.0 only permits R1 and R2 actions")
 	}
+	if schemaVersion == HighRiskExecutableSchemaVersion && action.Risk != RiskR3 {
+		return errors.New("Plan 0.3.0 requires R3 risk")
+	}
 	if !action.Confirmation.Required || action.Confirmation.Scope != "plan" {
-		return errors.New("R1/R2 action requires plan-level confirmation")
+		return errors.New("action requires Plan-bound confirmation")
 	}
 	if action.ElevationRequired {
-		return errors.New("Plan 0.1.0/0.2.0 cannot require elevation")
+		return errors.New("supported Plan versions cannot require elevation")
 	}
 	if action.Download.State != "known" && action.Download.State != "unknown" {
 		return errors.New("download state is unknown")
@@ -140,6 +156,10 @@ func validateAction(schemaVersion string, action Action) error {
 	}
 	if action.Download.State == "unknown" && action.Download.Bytes != nil {
 		return errors.New("unknown download cannot include bytes")
+	}
+	if schemaVersion == HighRiskExecutableSchemaVersion &&
+		(action.Download.State != "known" || action.Download.Bytes == nil || *action.Download.Bytes != 0 || len(action.Dependencies) != 0) {
+		return errors.New("Plan 0.3.0 default actions cannot download or depend on another action")
 	}
 	if len(action.Preconditions) == 0 {
 		return errors.New("preconditions are required")
@@ -159,10 +179,29 @@ func validateAction(schemaVersion string, action Action) error {
 			return errors.New("invalid check metadata")
 		}
 	}
-	if action.Recovery.Mode != "manual" || strings.TrimSpace(action.Recovery.Summary) == "" {
+	if strings.TrimSpace(action.Recovery.Summary) == "" {
+		return errors.New("recovery metadata is required")
+	}
+	if schemaVersion == HighRiskExecutableSchemaVersion {
+		if action.Operation == "set_default" && action.Recovery.Mode != "plan" {
+			return errors.New("set_default requires recovery Plan metadata")
+		}
+		if action.Operation == "restore_default" && action.Recovery.Mode != "manual" {
+			return errors.New("restore_default requires manual recovery metadata")
+		}
+	} else if action.Recovery.Mode != "manual" {
 		return errors.New("manual recovery metadata is required")
 	}
 	return nil
+}
+
+func exactStableVersion(value string) bool {
+	if strings.TrimSpace(value) != value {
+		return false
+	}
+	parsed := versioncore.ParseSemVer(value)
+	return parsed.Comparable && parsed.Normalized == strings.TrimPrefix(value, "v") &&
+		!strings.Contains(parsed.Normalized, "+") && !strings.Contains(parsed.Normalized, "-")
 }
 
 func validRisk(value Risk) bool {
@@ -187,7 +226,7 @@ func riskRank(value Risk) int {
 }
 
 func validCheckKind(schemaVersion, value string) bool {
-	if schemaVersion == ExecutableSchemaVersion {
+	if schemaVersion == ExecutableSchemaVersion || schemaVersion == HighRiskExecutableSchemaVersion {
 		return identifierPattern.MatchString(value)
 	}
 	switch value {
