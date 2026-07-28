@@ -245,6 +245,19 @@
 - 决定：默认 alias 只接受 NVM 规范单行格式；设置目标固定为 `vX.Y.Z`，不使用会漂移的 `node`、主版本或次版本前缀。执行前重新扫描并校验 Inventory、`nvm.sh` 和 alias digest；动作后验证 alias 值、解析版本、目标可执行性、当前 Shell 版本未变及隔离新 Shell 默认版本。
 - 决定：Operation Record 继续使用 `0.2.0`，快照记录原/新 alias、解析版本和 digest。验证失败不自动回滚；恢复必须从源记录生成新 Plan ID 并再次 R3 确认。当前 alias 与源操作的 after 快照不一致时拒绝覆盖；不支持自动、AI 或配置无人值守恢复。
 
+### D-027：I17 Node 附属工具更新契约
+
+- 状态：Accepted（维护者于 2026-07-28 确认两小时时间盒方案并指示开始开发）
+- 事实依据：[npm 官方文档](https://docs.npmjs.com/try-the-latest-stable-version-of-npm)使用全局 `npm install npm@latest -g` 更新 npm；I17 将浮动的 `latest` 收紧为用户明确审查的精确稳定版本，并固定目标 Node 的 npm、prefix、registry 与安全参数。
+- 事实依据：[Corepack 官方 README](https://github.com/nodejs/corepack)规定 Corepack 本身通过 npm 安装或更新，`corepack install --global <name@version>` 更新项目外使用的 Known Good Release；`COREPACK_HOME` 默认是用户级缓存，`COREPACK_ENABLE_PROJECT_SPEC=0`、`COREPACK_DEFAULT_TO_LATEST=0`、`COREPACK_ENV_FILE=0` 和 `COREPACK_ENABLE_NETWORK` 可分别控制项目约束、远程漂移、环境文件与联网。
+- 事实依据：[pnpm 官方 self-update 文档](https://pnpm.io/cli/self-update)说明 `pnpm self-update` 在项目上下文可能更新 `package.json`，全局模式又取决于安装上下文；I17 不使用该命令，避免修改项目或把更新路由到错误的全局安装。
+- 决定：公开 `envmason update node-tools --node-version <已安装精确版本> [--npm <精确版本>] [--corepack <精确版本>] [--pnpm <精确版本>] [--dry-run]`。至少选择一项，省略即排除；不接受 `latest`、版本范围、降级、隐式当前 Node、Yarn、`--yes` 或非交互确认。目标等于当前版本时允许生成幂等验证 Plan。
+- 决定：I17 复用 Plan `0.2.0`、Operation Record `0.2.0` 和现有确定性执行器，不新增公开 Schema。每个选中工具是独立 R2 Action，按 npm、Corepack、pnpm 的实际提供方建立依赖并统一要求 `apply <完整 Plan ID>` 计划级确认；失败后停止，后续动作保持 Pending。继续 Plan、跨运行检查点和恢复 Plan 仍属于 I18。
+- 决定：目标必须是已有 NVM Node。执行前绑定并复核 Inventory、`nvm.sh`、default alias、目标 Node 根目录、目标工具软链接解析、package.json 名称/版本/摘要及提供方；软链接或包入口解析到目标 Node 根目录外时拒绝。Corepack 代理 pnpm 的当前版本通过关闭联网和项目选择的目标代理 `--version` 读取，以阻止隐式降级。执行后通过目标工具的绝对路径验证精确版本，同时验证目标 Node、当前生效 Node 和 default alias 未改变。
+- 决定：npm、Corepack 和独立 pnpm 只通过目标 Node 的 npm 运行固定 `install --global` 模板，使用固定官方 registry、目标 Node prefix、关闭 lifecycle scripts/audit/fund/update notifier，并忽略用户和全局 npm 配置。Corepack 代理 pnpm 只通过目标 Node 的 Corepack 运行固定 `install --global pnpm@<精确版本>`，关闭项目规范、auto-pin、远程 latest 漂移、自定义 URL 和 `.corepack.env`。
+- 决定：Corepack 的 Known Good Release 按其官方契约存放在用户级 `COREPACK_HOME`，不是 NVM 版本私有缓存。I17 的 Node 作用域保证是“命令、代理所有权、bin 目录和验证都绑定目标 Node”，不承诺 Corepack 缓存在不同 NVM Node 之间隔离；Plan 必须显式标记 `corepack` provider，且动作不得改写其他 Node 的 `bin` 目录。
+- 决定：I17 不安装 NVM/Node，不修改 default alias 或当前 Shell，不迁移任意全局 npm 包，不修改项目 `package.json`/lockfile，不读取用户包管理器配置或认证，不支持 Homebrew/standalone/未知 provider，不清理缓存或失败残留，不自动回滚，不提权。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -564,3 +577,21 @@
 - 远程检查：[main CI #43](https://github.com/gitbagHero/EnvMason/actions/runs/29725948971) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：I16 不安装或升级 NVM/Node/npm/Corepack/pnpm，不卸载或清理任何版本，不修改 Shell profile，不切换当前 Shell，不提权，不提供无人值守确认或自动回滚，不进入 I17。
 - 结论：I16 已依据维护者明确决策和 D-014 预授权完成验收并进入 `main`。本批次到 I16 结束，I17 尚未开始。
+
+## I17 验收记录
+
+- 增量：I17 Node 附属工具更新
+- 开始与本地检查日期：2026-07-28
+- 客观检查状态：本地实现、fixture、全量回归与构建门禁通过
+- 维护者最终验收：Accepted（维护者于 2026-07-28 确认本地候选没有问题并授权提交、推送）
+- 用户价值与范围检查：新增 `envmason update node-tools`，在一个已安装 NVM Node 下分别选择 npm、Corepack、pnpm 精确目标；省略任一参数即可排除。范围外保持为 NVM/Node 安装、default/current Shell 修改、全局包迁移、Yarn、清理、自动回滚、I18 继续/恢复 Plan 和任意命令。
+- Plan 与确认检查：复用 Plan `0.2.0` 和 Operation Record `0.2.0`，所有 Action 为 R2、声明式身份和依赖，不新增公开 Schema。dry-run 不确认、不执行、不创建操作记录；真实入口只接受交互式 `apply <完整 Plan ID>`，没有 `--yes`。浮动版本、版本范围、降级、缺少选择和未知 provider 在写入前拒绝。
+- 归属与固定适配器检查：目标 Node、npm/Corepack/pnpm 的入口、解析路径、package.json、provider 和控制摘要均由核心检查；越出目标 Node 根目录的链接被拒绝。npm provider 使用目标 npm 的固定全局安装模板；Corepack provider 使用目标 Corepack 的固定 Known Good Release 模板。命令均为绝对路径和结构化参数，不接受 Shell 文本、外部参数或项目配置。
+- 受控环境检查：固定官方 registry 和目标 prefix，关闭 npm lifecycle scripts/audit/fund/update notifier，关闭 Corepack project spec/auto-pin/default latest/unsafe URL/环境文件；不继承用户 npm/Corepack 配置、Token 或 hook，只传递受控 HOME、PATH、临时目录和标准代理。敏感路径与代理值进入已有 Operation Record 脱敏链路。
+- 成功、幂等与失败检查：fixture 覆盖 npm/Corepack/Corepack-proxy pnpm 归属、独立 npm provider 与 Corepack provider 的不同命令、相同版本幂等跳过、确认后环境漂移拒绝、目标路径逃逸拒绝，以及 npm 已验证完成、Corepack 失败、后续 pnpm 保持 Pending 的三种真实步骤状态。
+- 必要基线修复：真实只读扫描暴露 I06 在 PATH 重复出现同一生效 Node 时会被后续非生效重复项覆盖；改为合并 `Effective` 状态并增加回归测试，保证 I17 能稳定绑定 active Node，未扩大 I17 产品范围。
+- 本机只读检查：宿主 NVM Node v26.5.0 的 dry-run 正确识别 npm v12.0.1 和 Corepack-managed pnpm v11.13.0；相同 npm 版本生成幂等 R2 Plan，较低 pnpm 目标在准备阶段拒绝，较高精确 pnpm 目标显示 `corepack` provider。所有 dry-run 均未创建 Operation Record，也未执行更新。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` I17 核心测试及 Linux/Windows amd64 目标构建均通过。
+- 稳定性检查：同时并行叠加普通全量与 race 全量时，普通套件中的既有 I15 安装 fixture 一次验证失败，而同轮 race 通过；该 I15 目标测试随后独立连续 10 次通过，顺序运行的普通全量也通过，未复现 I17 回归。
+- 限制与后续门禁：未对宿主执行真实 npm/Corepack/pnpm 更新；联网下载、远端包不存在、真实缓存/磁盘失败和真实进程中断仍应优先在可恢复环境验证。该限制不开放宿主写入或扩大 I17 范围；远程 CI 结果仍是进入 I18 前的独立门禁。
+- 结论：I17 已由维护者确认验收并获准提交、推送；本次仍停在 I17，不进入 I18。

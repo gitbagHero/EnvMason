@@ -15,6 +15,7 @@ import (
 	"github.com/gitbagHero/EnvMason/internal/buildinfo"
 	defaultpkg "github.com/gitbagHero/EnvMason/internal/defaultversion"
 	"github.com/gitbagHero/EnvMason/internal/execution"
+	nodetoolspkg "github.com/gitbagHero/EnvMason/internal/nodetools"
 	planpkg "github.com/gitbagHero/EnvMason/internal/plan"
 	"github.com/gitbagHero/EnvMason/internal/report"
 )
@@ -30,11 +31,13 @@ const (
 func Execute(args []string, stdout, stderr io.Writer, info buildinfo.Info) int {
 	service := applypkg.DefaultService()
 	defaultService := defaultpkg.DefaultService()
+	nodeToolsService := nodetoolspkg.DefaultService()
 	return execute(args, stdout, stderr, info, commandDependencies{
 		generateReport: report.Generate, generatePlan: planpkg.Generate,
 		prepareApply: service.Prepare, executeApply: service.Execute, confirmApply: confirmPlan,
 		prepareDefaultSet: defaultService.PrepareSet, prepareDefaultRestore: defaultService.PrepareRestore,
 		executeDefault: defaultService.Execute, confirmDefault: confirmExplicit,
+		prepareNodeTools: nodeToolsService.Prepare, executeNodeTools: nodeToolsService.Execute, confirmNodeTools: confirmPlan,
 	})
 }
 
@@ -65,6 +68,9 @@ type commandDependencies struct {
 	prepareDefaultRestore func(context.Context, defaultpkg.RestoreOptions) (defaultpkg.Prepared, error)
 	executeDefault        func(context.Context, defaultpkg.Prepared, execution.ConfirmationReceipt) (defaultpkg.Result, error)
 	confirmDefault        func(string, string) (execution.ConfirmationReceipt, error)
+	prepareNodeTools      func(context.Context, nodetoolspkg.Options) (nodetoolspkg.Prepared, error)
+	executeNodeTools      func(context.Context, nodetoolspkg.Prepared, execution.ConfirmationReceipt) (nodetoolspkg.Result, error)
+	confirmNodeTools      func(string) (execution.ConfirmationReceipt, error)
 }
 
 type operationalError struct{ err error }
@@ -109,8 +115,71 @@ func newRootCommand(info buildinfo.Info, stdout, stderr io.Writer, deps commandD
 	root.AddCommand(newPlanCommand(deps))
 	root.AddCommand(newApplyCommand(deps))
 	root.AddCommand(newDefaultCommand(deps))
+	root.AddCommand(newUpdateCommand(deps))
 
 	return root
+}
+
+func newUpdateCommand(deps commandDependencies) *cobra.Command {
+	command := &cobra.Command{
+		Use:                   "update",
+		Short:                 "Review and apply a bounded ancillary-tool update",
+		Args:                  cobra.NoArgs,
+		DisableFlagsInUseLine: true,
+		RunE:                  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
+	command.AddCommand(newNodeToolsCommand(deps))
+	return command
+}
+
+func newNodeToolsCommand(deps commandDependencies) *cobra.Command {
+	var nodeVersion, npmVersion, corepackVersion, pnpmVersion string
+	var dryRun bool
+	command := &cobra.Command{
+		Use:                   "node-tools",
+		Short:                 "Update selected tools under one installed NVM Node.js version",
+		Args:                  cobra.NoArgs,
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			options := nodetoolspkg.Options{
+				NodeVersion: nodeVersion, NPMVersion: npmVersion,
+				CorepackVersion: corepackVersion, PNPMVersion: pnpmVersion,
+			}
+			if err := nodetoolspkg.ValidateOptions(options); err != nil {
+				return err
+			}
+			if deps.prepareNodeTools == nil || deps.executeNodeTools == nil || deps.confirmNodeTools == nil {
+				return operationalError{err: errors.New("Node tools update dependencies are unavailable")}
+			}
+			prepared, err := deps.prepareNodeTools(cmd.Context(), options)
+			if err != nil {
+				return operationalError{err: fmt.Errorf("prepare Node tools Plan: %w", err)}
+			}
+			if err := renderPreparedPlan(cmd, prepared.Plan, dryRun); err != nil || dryRun {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Type 'apply %s' to confirm this exact R2 Plan: ", prepared.Plan.ID)
+			receipt, err := deps.confirmNodeTools(prepared.Plan.ID)
+			if err != nil {
+				return operationalError{err: err}
+			}
+			result, err := deps.executeNodeTools(cmd.Context(), prepared, receipt)
+			if result.RecordPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Operation record: %s\n", result.RecordPath)
+			}
+			if err != nil {
+				return operationalError{err: fmt.Errorf("execute confirmed Node tools Plan: %w", err)}
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Operation %s completed and verified.\n", result.Record.ID)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&nodeVersion, "node-version", "", "exact installed NVM Node.js version that owns the tools")
+	command.Flags().StringVar(&npmVersion, "npm", "", "exact npm target version; omit to exclude npm")
+	command.Flags().StringVar(&corepackVersion, "corepack", "", "exact Corepack target version; omit to exclude Corepack")
+	command.Flags().StringVar(&pnpmVersion, "pnpm", "", "exact pnpm target version; omit to exclude pnpm")
+	command.Flags().BoolVar(&dryRun, "dry-run", false, "review the R2 Plan without confirmation or writes")
+	return command
 }
 
 func newApplyCommand(deps commandDependencies) *cobra.Command {

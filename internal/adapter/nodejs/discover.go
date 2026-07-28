@@ -71,7 +71,7 @@ func discover(ctx context.Context, request Request, deps dependencies) (Result, 
 				for index := range records {
 					if filepath.Clean(records[index].resolved) == key {
 						records[index].installation.InPATH = true
-						records[index].installation.Effective = candidate.Effective
+						records[index].installation.Effective = records[index].installation.Effective || candidate.Effective
 					}
 				}
 			}

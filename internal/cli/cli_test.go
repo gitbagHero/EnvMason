@@ -15,6 +15,7 @@ import (
 	defaultpkg "github.com/gitbagHero/EnvMason/internal/defaultversion"
 	"github.com/gitbagHero/EnvMason/internal/execution"
 	"github.com/gitbagHero/EnvMason/internal/inventory"
+	nodetoolspkg "github.com/gitbagHero/EnvMason/internal/nodetools"
 	planpkg "github.com/gitbagHero/EnvMason/internal/plan"
 	"github.com/gitbagHero/EnvMason/internal/report"
 )
@@ -47,7 +48,7 @@ func TestHelpEntryPoints(t *testing.T) {
 			if stderr != "" {
 				t.Fatalf("stderr = %q, want empty", stderr)
 			}
-			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan", "apply", "default"} {
+			for _, want := range []string{"Usage:", "envmason [command]", "--version", "version", "report", "plan", "apply", "default", "update"} {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("stdout does not contain %q:\n%s", want, stdout)
 				}
@@ -60,6 +61,107 @@ func TestHelpEntryPoints(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNodeToolsDryRunAndExactPlanConfirmation(t *testing.T) {
+	prepared := nodeToolsPreparedForCLI(t)
+	confirmed, executed := 0, 0
+	deps := commandDependencies{
+		prepareNodeTools: func(_ context.Context, options nodetoolspkg.Options) (nodetoolspkg.Prepared, error) {
+			if options.NodeVersion != "24.12.0" || options.NPMVersion != "12.0.1" || options.PNPMVersion != "11.1.0" {
+				t.Fatalf("options = %#v", options)
+			}
+			return prepared, nil
+		},
+		confirmNodeTools: func(id string) (execution.ConfirmationReceipt, error) {
+			confirmed++
+			if id != prepared.Plan.ID {
+				t.Fatalf("confirmation ID = %s", id)
+			}
+			return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: id, ConfirmedAt: prepared.Plan.CreatedAt.Add(time.Second)}, nil
+		},
+		executeNodeTools: func(_ context.Context, got nodetoolspkg.Prepared, receipt execution.ConfirmationReceipt) (nodetoolspkg.Result, error) {
+			executed++
+			if got.Plan.ID != prepared.Plan.ID || receipt.ConfirmedPlanID != prepared.Plan.ID {
+				t.Fatal("Node tools execution was not Plan-bound")
+			}
+			return nodetoolspkg.Result{
+				Record:     execution.Record{ID: "op-00000000000000000000000000000003"},
+				RecordPath: "/tmp/node-tools.json",
+			}, nil
+		},
+	}
+	args := []string{"update", "node-tools", "--node-version", "24.12.0", "--npm", "12.0.1", "--pnpm", "11.1.0"}
+	code, stdout, stderr := executeForTestWithDependencies(append(append([]string{}, args...), "--dry-run"), deps)
+	if code != ExitSuccess || stderr != "" || confirmed != 0 || executed != 0 ||
+		!strings.Contains(stdout, "risk=R2") || !strings.Contains(stdout, "Dry run complete") {
+		t.Fatalf("dry run = %d/%q/%q confirmed=%d executed=%d", code, stdout, stderr, confirmed, executed)
+	}
+	code, stdout, stderr = executeForTestWithDependencies(args, deps)
+	if code != ExitSuccess || stderr != "" || confirmed != 1 || executed != 1 ||
+		!strings.Contains(stdout, "Type 'apply "+prepared.Plan.ID+"'") ||
+		!strings.Contains(stdout, "Operation record: /tmp/node-tools.json") {
+		t.Fatalf("update = %d/%q/%q confirmed=%d executed=%d", code, stdout, stderr, confirmed, executed)
+	}
+}
+
+func TestNodeToolsRejectsUnsafeUsageBeforePreparation(t *testing.T) {
+	preparedCalls := 0
+	deps := commandDependencies{
+		prepareNodeTools: func(context.Context, nodetoolspkg.Options) (nodetoolspkg.Prepared, error) {
+			preparedCalls++
+			return nodetoolspkg.Prepared{}, nil
+		},
+		executeNodeTools: func(context.Context, nodetoolspkg.Prepared, execution.ConfirmationReceipt) (nodetoolspkg.Result, error) {
+			return nodetoolspkg.Result{}, nil
+		},
+		confirmNodeTools: func(string) (execution.ConfirmationReceipt, error) {
+			return execution.ConfirmationReceipt{}, nil
+		},
+	}
+	for _, args := range [][]string{
+		{"update", "node-tools", "--node-version", "24.12.0"},
+		{"update", "node-tools", "--node-version", "lts", "--npm", "12.0.1"},
+		{"update", "node-tools", "--node-version", "24.12.0", "--npm", "latest"},
+		{"update", "node-tools", "--node-version", "24.12.0", "--npm", "12.0.1", "--yes"},
+	} {
+		code, _, _ := executeForTestWithDependencies(args, deps)
+		if code != ExitUsage {
+			t.Fatalf("unsafe usage %q = %d", args, code)
+		}
+	}
+	if preparedCalls != 0 {
+		t.Fatalf("prepare called %d times", preparedCalls)
+	}
+}
+
+func nodeToolsPreparedForCLI(t *testing.T) nodetoolspkg.Prepared {
+	t.Helper()
+	createdAt := time.Date(2026, 7, 28, 8, 0, 0, 0, time.UTC)
+	digest := "sha256:" + strings.Repeat("a", 64)
+	value, err := planpkg.BuildNodeTools(planpkg.NodeToolsInput{
+		CreatedAt: createdAt, NodeVersion: "24.12.0",
+		NVMScriptDigest: digest, DefaultAliasDigest: "sha256:" + strings.Repeat("b", 64),
+		Inventory: inventory.Inventory{
+			SchemaVersion: inventory.SchemaVersion, GeneratedAt: createdAt,
+			System: inventory.System{OS: inventory.OSMacOS, OSVersion: "15.0", Architecture: inventory.ArchitectureARM64},
+			Tools: []inventory.Tool{{
+				ID: "runtime.node", DisplayName: "Node.js", Category: inventory.CategoryRuntime,
+				Installations: []inventory.Installation{{
+					ID: "node-target", Version: "v24.12.0", Path: "$HOME/.nvm/versions/node/v24.12.0/bin/node",
+					Manager: "nvm", ActiveState: inventory.ActiveStateActive, DefaultState: inventory.DefaultStateDefault,
+				}},
+			}},
+		},
+		Targets: []planpkg.NodeToolTarget{
+			{ToolID: planpkg.NodeToolNPM, CurrentVersion: "11.6.2", TargetVersion: "12.0.1", Provider: planpkg.NodeToolProviderNPM, ControlDigest: digest},
+			{ToolID: planpkg.NodeToolPNPM, CurrentVersion: "unknown", TargetVersion: "11.1.0", Provider: planpkg.NodeToolProviderCorepack, ControlDigest: digest},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return nodetoolspkg.Prepared{Plan: value}
 }
 
 func TestDefaultSetDryRunAndExplicitR3Confirmation(t *testing.T) {

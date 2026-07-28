@@ -149,6 +149,24 @@ func TestDiscoverMultipleSourcesAndPATHShadowing(t *testing.T) {
 	assertFindingCode(t, result.Findings, "NODE_MULTIPLE_SOURCES")
 }
 
+func TestDiscoverRepeatedEffectiveNodePathKeepsCurrentSelection(t *testing.T) {
+	t.Parallel()
+	requirePOSIXFixture(t)
+
+	root := t.TempDir()
+	bin := filepath.Join(root, "node-bin")
+	node := writeExecutable(t, bin, "node")
+	runner := newFakeRunner()
+	runner.versions[node] = "v24.12.0"
+	result, err := discover(context.Background(), fixtureRequest(root, []string{bin, bin}), dependencies{runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Nodes) != 1 || !result.Nodes[0].Effective || !result.Nodes[0].InPATH || result.CurrentNodeID != result.Nodes[0].ID {
+		t.Fatalf("repeated PATH result = %#v", result)
+	}
+}
+
 func TestDiscoverNVMNotLoadedStillFindsDiskVersions(t *testing.T) {
 	t.Parallel()
 	requirePOSIXFixture(t)

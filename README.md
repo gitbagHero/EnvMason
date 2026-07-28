@@ -4,7 +4,7 @@ EnvMason 是面向 macOS、Windows 和 Linux 的开发者工作站生命周期�
 
 ## 当前状态
 
-**I00：产品契约冻结** 至 **I16：Node 默认版本切换** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias 及显式恢复原 alias。当前仍不能安装 NVM、升级 npm/Corepack/pnpm、卸载旧版本或执行任意命令。
+**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
 
 核心原则：
 
@@ -146,3 +146,22 @@ envmason default restore --operation op-00000000000000000000000000000000
 ```
 
 恢复是新的 R3 Plan，具有新 Plan ID，并要求逐字输入 `restore-default <完整 Plan ID>`。验证失败时系统只输出恢复建议，不会自动回滚；如果 alias 在原操作后被外部修改，恢复 Plan 会拒绝覆盖。
+
+## Node 附属工具更新
+
+I17 在 macOS 和已有 NVM 的前提下，将更新绑定到一个已经安装的精确 Node 版本。每个目标版本都必须显式提供；省略某个参数即把对应工具排除在 Plan 外：
+
+```sh
+envmason update node-tools \
+  --node-version 24.14.0 \
+  --npm 12.0.1 \
+  --corepack 0.35.0 \
+  --pnpm 11.1.0 \
+  --dry-run
+```
+
+移除 `--dry-run` 后，CLI 仍要求在交互终端逐字输入 `apply <完整 Plan ID>`。不支持 `latest`、版本范围、降级、`--yes`、管道确认或 AI 代确认；至少选择 npm、Corepack、pnpm 中的一项，目标可以等于当前版本以完成幂等验证。Plan 固定使用已有 `0.2.0` 声明式 Action 和 R2 计划级确认，不包含 Shell 或用户提供的命令。
+
+npm 与 Corepack 由目标 Node 自己的 npm 使用固定官方 registry 和关闭 lifecycle scripts 的受控环境更新；独立安装的 pnpm 也通过该 npm 更新。Corepack 代理的 pnpm 使用目标 Node 自己的 Corepack 执行精确 `install --global`，与独立 pnpm 使用不同适配器。Corepack 的 Known Good Release 存放在其用户级 `COREPACK_HOME`，因此 Plan 会明确标记 Corepack provider，但不承诺不同 NVM Node 之间的 Corepack 缓存隔离；动作不会改写其他 Node 的 `bin` 目录。
+
+执行前重新扫描 Inventory，并重新校验目标 Node、工具提供方、包元数据摘要、`nvm.sh` 和 default alias。每项动作后都验证目标工具路径、版本、目标 Node、当前生效 Node 和 default alias；任一项失败时后续动作保持 Pending，Operation Record 分别保留已完成、失败与未执行状态。I17 不修改项目 `package.json` 或 lockfile，不读取用户 npm/Corepack 配置，不迁移全局包，不处理 Yarn，也不提供 I18 的继续 Plan、检查点恢复或自动回滚。
