@@ -32,10 +32,14 @@ func (executor Executor) Execute(ctx context.Context, request Request) (Record, 
 	if err := validateRequest(request, now); err != nil {
 		return Record{}, err
 	}
+	confirmedPlan, err := cloneConfirmedPlan(request.Plan)
+	if err != nil {
+		return Record{}, executionError(CodePlanInvalid, "confirmed Plan could not be copied")
+	}
 	if executor.Runner == nil || executor.Store == nil {
 		return Record{}, executionError(CodePlanInvalid, "executor dependencies are incomplete")
 	}
-	actions, err := orderedActions(request.Plan.Actions)
+	actions, err := orderedActions(confirmedPlan.Actions)
 	if err != nil {
 		return Record{}, executionError(CodePlanInvalid, "plan action order is invalid")
 	}
@@ -51,12 +55,19 @@ func (executor Executor) Execute(ctx context.Context, request Request) (Record, 
 		}
 		prepared = append(prepared, preparedAction{action: action, definition: definition, spec: spec})
 	}
+	sensitiveValues := append([]string{}, request.SensitiveValues...)
+	for _, item := range prepared {
+		sensitiveValues = append(sensitiveValues, item.spec.SensitiveValues...)
+	}
+	if err := rejectSensitiveConfirmedPlan(confirmedPlan, sensitiveValues); err != nil {
+		return Record{}, executionError(CodePlanInvalid, "confirmed Plan contains a sensitive value and cannot be persisted")
+	}
 
 	id, err := executor.operationID()
 	if err != nil {
 		return Record{}, executionError(CodeLogWriteFailed, "operation identity could not be created")
 	}
-	record := newRecord(id, request, actions, now)
+	record := newRecord(id, request, confirmedPlan, actions, now)
 	if err := executor.Store.Save(record); err != nil {
 		return Record{}, executionError(CodeLogWriteFailed, "initial operation record could not be persisted")
 	}
@@ -265,7 +276,7 @@ func (executor Executor) logFailure(record Record, stepIndex int) (Record, error
 	return record, executionError(CodeLogWriteFailed, "operation record could not be persisted")
 }
 
-func newRecord(id string, request Request, actions []plan.Action, now time.Time) Record {
+func newRecord(id string, request Request, confirmedPlan plan.Plan, actions []plan.Action, now time.Time) Record {
 	steps := make([]StepRecord, 0, len(actions))
 	for _, action := range actions {
 		steps = append(steps, StepRecord{
@@ -276,9 +287,31 @@ func newRecord(id string, request Request, actions []plan.Action, now time.Time)
 	}
 	return Record{
 		SchemaVersion: RecordSchemaVersion, ID: id, PlanID: request.Plan.ID, PlanSchemaVersion: request.Plan.SchemaVersion,
-		State: StatePending, CreatedAt: now, UpdatedAt: now, Confirmation: request.Confirmation, Steps: steps,
+		ConfirmedPlan: &confirmedPlan,
+		State:         StatePending, CreatedAt: now, UpdatedAt: now, Confirmation: request.Confirmation, Steps: steps,
 		Transitions: []Transition{{State: StatePending, At: now, Reason: "confirmed immutable Plan accepted"}},
 	}
+}
+
+func cloneConfirmedPlan(value plan.Plan) (plan.Plan, error) {
+	data, err := plan.Marshal(value)
+	if err != nil {
+		return plan.Plan{}, err
+	}
+	return plan.Decode(data)
+}
+
+func rejectSensitiveConfirmedPlan(value plan.Plan, sensitiveValues []string) error {
+	data, err := plan.Marshal(value)
+	if err != nil {
+		return err
+	}
+	for _, sensitive := range sensitiveValues {
+		if sensitive != "" && strings.Contains(string(data), sensitive) {
+			return errors.New("confirmed Plan contains a sensitive value")
+		}
+	}
+	return nil
 }
 
 func orderedActions(actions []plan.Action) ([]plan.Action, error) {

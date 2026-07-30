@@ -11,7 +11,9 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
+	"github.com/gitbagHero/EnvMason/internal/plan"
 	operationschema "github.com/gitbagHero/EnvMason/schemas/operation"
+	planschema "github.com/gitbagHero/EnvMason/schemas/plan"
 )
 
 var operationIDPattern = regexp.MustCompile(`^op-[a-f0-9]{32}$`)
@@ -63,7 +65,8 @@ func ValidateRecordJSON(data []byte) error {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return fmt.Errorf("parse operation record JSON: %w", err)
 	}
-	if envelope.SchemaVersion != RecordSchemaVersion && envelope.SchemaVersion != PreviousRecordSchemaVersion {
+	if envelope.SchemaVersion != RecordSchemaVersion && envelope.SchemaVersion != PreviousRecordSchemaVersion &&
+		envelope.SchemaVersion != LegacyRecordSchemaVersion {
 		return fmt.Errorf("validate operation record JSON: unsupported schema_version %q", envelope.SchemaVersion)
 	}
 	schema, err := recordSchema(envelope.SchemaVersion)
@@ -81,7 +84,9 @@ func ValidateRecordJSON(data []byte) error {
 }
 
 func ValidateRecord(value Record) error {
-	if (value.SchemaVersion != RecordSchemaVersion && value.SchemaVersion != PreviousRecordSchemaVersion) || !operationIDPattern.MatchString(value.ID) || !planIDPattern.MatchString(value.PlanID) || value.PlanSchemaVersion == "" {
+	if (value.SchemaVersion != RecordSchemaVersion && value.SchemaVersion != PreviousRecordSchemaVersion &&
+		value.SchemaVersion != LegacyRecordSchemaVersion) || !operationIDPattern.MatchString(value.ID) ||
+		!planIDPattern.MatchString(value.PlanID) || value.PlanSchemaVersion == "" {
 		return errors.New("validate operation record: identity is incomplete")
 	}
 	if value.CreatedAt.IsZero() || value.UpdatedAt.Before(value.CreatedAt) || len(value.Steps) == 0 || len(value.Transitions) == 0 {
@@ -89,6 +94,9 @@ func ValidateRecord(value Record) error {
 	}
 	if value.Confirmation.Scope != "plan" || value.Confirmation.ConfirmedPlanID != value.PlanID || value.Confirmation.ConfirmedAt.IsZero() || value.Confirmation.ConfirmedAt.After(value.CreatedAt) {
 		return errors.New("validate operation record: confirmation does not match Plan ID")
+	}
+	if err := validateConfirmedPlan(value); err != nil {
+		return err
 	}
 	if value.Transitions[0].State != StatePending || value.Transitions[len(value.Transitions)-1].State != value.State {
 		return errors.New("validate operation record: transition history does not match state")
@@ -108,7 +116,7 @@ func ValidateRecord(value Record) error {
 		if terminalState(step.State) && step.FinishedAt == nil {
 			return errors.New("validate operation record: terminal step has no finish time")
 		}
-		if value.SchemaVersion == PreviousRecordSchemaVersion && (step.Before != nil || step.After != nil || len(step.Diff) > 0 || step.Skipped) {
+		if value.SchemaVersion == LegacyRecordSchemaVersion && (step.Before != nil || step.After != nil || len(step.Diff) > 0 || step.Skipped) {
 			return errors.New("validate operation record: 0.1.0 cannot contain state snapshots")
 		}
 		for _, snapshot := range []*Snapshot{step.Before, step.After} {
@@ -159,6 +167,43 @@ func ValidateRecord(value Record) error {
 	return nil
 }
 
+func validateConfirmedPlan(value Record) error {
+	if value.SchemaVersion != RecordSchemaVersion {
+		if value.ConfirmedPlan != nil {
+			return errors.New("validate operation record: legacy record cannot contain confirmed Plan")
+		}
+		return nil
+	}
+	if value.ConfirmedPlan == nil {
+		return errors.New("validate operation record: confirmed Plan is required")
+	}
+	confirmed := *value.ConfirmedPlan
+	if err := plan.Validate(confirmed); err != nil {
+		return errors.New("validate operation record: confirmed Plan is invalid")
+	}
+	if value.Confirmation.ConfirmedAt.Before(confirmed.CreatedAt) || value.CreatedAt.After(confirmed.ExpiresAt) {
+		return errors.New("validate operation record: confirmed Plan was not valid when execution started")
+	}
+	if !confirmed.Executable ||
+		(confirmed.SchemaVersion != plan.ExecutableSchemaVersion && confirmed.SchemaVersion != plan.HighRiskExecutableSchemaVersion) ||
+		confirmed.ID != value.PlanID || confirmed.SchemaVersion != value.PlanSchemaVersion ||
+		confirmed.ID != value.Confirmation.ConfirmedPlanID {
+		return errors.New("validate operation record: confirmed Plan identity does not match record")
+	}
+	actions, err := orderedActions(confirmed.Actions)
+	if err != nil || len(actions) != len(value.Steps) {
+		return errors.New("validate operation record: confirmed Plan actions do not match steps")
+	}
+	for index, action := range actions {
+		step := value.Steps[index]
+		if step.ActionID != action.ID || step.ToolID != action.ToolID || step.Operation != action.Operation ||
+			step.Adapter != action.Adapter || step.Risk != action.Risk {
+			return errors.New("validate operation record: confirmed Plan action identity does not match step")
+		}
+	}
+	return nil
+}
+
 func validState(state State) bool {
 	switch state {
 	case StatePending, StateRunning, StateVerifying, StateCompleted, StateFailed, StateTimedOut, StateCancelled, StateInterrupted:
@@ -198,6 +243,21 @@ func recordSchema(version string) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	compiler.AssertFormat()
+	if version == RecordSchemaVersion {
+		for _, planVersion := range []string{plan.ExecutableSchemaVersion, plan.HighRiskExecutableSchemaVersion} {
+			planData, planID, ok := planschema.ByVersion(planVersion)
+			if !ok {
+				return nil, fmt.Errorf("unsupported confirmed Plan schema_version %q", planVersion)
+			}
+			planDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(planData))
+			if err != nil {
+				return nil, err
+			}
+			if err := compiler.AddResource(planID, planDocument); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if err := compiler.AddResource(id, document); err != nil {
 		return nil, err
 	}

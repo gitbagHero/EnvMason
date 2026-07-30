@@ -107,8 +107,14 @@ func (service Service) Prepare(ctx context.Context, options Options) (Prepared, 
 	if err != nil {
 		return Prepared{}, err
 	}
+	planInventory, err := privatePlanInventory(
+		value, adapterOptions.Home, baseline.NVM.Directory, adapterOptions.Temporary,
+	)
+	if err != nil {
+		return Prepared{}, err
+	}
 	nodePlan, err := plan.BuildNodeTools(plan.NodeToolsInput{
-		Inventory: value, CreatedAt: service.now(), NodeVersion: baseline.NodeVersion,
+		Inventory: planInventory, CreatedAt: service.now(), NodeVersion: baseline.NodeVersion,
 		NVMScriptDigest: baseline.NVM.ScriptDigest, DefaultAliasDigest: baseline.NVM.DefaultAliasDigest,
 		Targets: planTargets,
 	})
@@ -143,8 +149,14 @@ func (service Service) Execute(ctx context.Context, prepared Prepared, receipt e
 	if err != nil {
 		return Result{}, err
 	}
+	planInventory, err := privatePlanInventory(
+		currentInventory, currentOptions.Home, current.NVM.Directory, currentOptions.Temporary,
+	)
+	if err != nil {
+		return Result{}, err
+	}
 	rebuilt, err := plan.BuildNodeTools(plan.NodeToolsInput{
-		Inventory: currentInventory, CreatedAt: prepared.Plan.CreatedAt, NodeVersion: current.NodeVersion,
+		Inventory: planInventory, CreatedAt: prepared.Plan.CreatedAt, NodeVersion: current.NodeVersion,
 		NVMScriptDigest: current.NVM.ScriptDigest, DefaultAliasDigest: current.NVM.DefaultAliasDigest,
 		Targets: currentTargets,
 	})
@@ -305,6 +317,17 @@ func activeNode(value inventory.Inventory, home string) (string, string) {
 func environment(lookup func(string) (string, bool), key string) string {
 	value, _ := lookup(key)
 	return value
+}
+
+func privatePlanInventory(value inventory.Inventory, home, nvmDirectory, temporary string) (inventory.Inventory, error) {
+	if !filepath.IsAbs(temporary) {
+		temporary = ""
+	}
+	return inventory.RedactInstallationPaths(value,
+		inventory.PathRedaction{Root: nvmDirectory, Placeholder: "$NVM_DIR"},
+		inventory.PathRedaction{Root: home, Placeholder: "$HOME"},
+		inventory.PathRedaction{Root: temporary, Placeholder: "$TMPDIR"},
+	)
 }
 
 func proxyEnvironment(lookup func(string) (string, bool)) map[string]string {

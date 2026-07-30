@@ -94,6 +94,14 @@ func TestExecuteUsesSharedExecutorAndSkipsSatisfiedTarget(t *testing.T) {
 	if result.RecordPath == "" {
 		t.Fatal("operation record path is empty")
 	}
+	recordJSON, err := execution.MarshalRecord(result.Record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(recordJSON), prepared.baseline.NVM.Directory) ||
+		!strings.Contains(string(recordJSON), "$NVM_DIR") {
+		t.Fatalf("Node tools record leaked private Plan path: %s", recordJSON)
+	}
 }
 
 func TestExecuteVerifiesSatisfiedCorepackProxyWithExactCurrentVersion(t *testing.T) {

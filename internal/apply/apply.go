@@ -102,8 +102,14 @@ func (service Service) Prepare(ctx context.Context, options Options) (Prepared, 
 	if err != nil {
 		return Prepared{}, err
 	}
+	planInventory, err := privatePlanInventory(
+		assessmentResult.Inventory, home, directory, environment(service.LookupEnv, "TMPDIR"),
+	)
+	if err != nil {
+		return Prepared{}, err
+	}
 	value, err := plan.BuildExecutable(plan.BuildInput{
-		Inventory: assessmentResult.Inventory, Policy: policy, Versions: assessmentResult.Versions,
+		Inventory: planInventory, Policy: policy, Versions: assessmentResult.Versions,
 		CreatedAt: service.now(), TTL: plan.DefaultTTL,
 	}, baseline.ScriptDigest, baseline.DefaultAliasDigest)
 	if err != nil {
@@ -127,8 +133,14 @@ func (service Service) Execute(ctx context.Context, prepared Prepared, receipt e
 	if err != nil {
 		return Result{}, fmt.Errorf("re-scan environment before execution: %w", err)
 	}
+	planInventory, err := privatePlanInventory(
+		current, prepared.nvmOptions.Home, prepared.baseline.Directory, prepared.nvmOptions.Temporary,
+	)
+	if err != nil {
+		return Result{}, err
+	}
 	rebuilt, err := plan.BuildExecutable(plan.BuildInput{
-		Inventory: current, Policy: prepared.policy, Versions: prepared.versions,
+		Inventory: planInventory, Policy: prepared.policy, Versions: prepared.versions,
 		CreatedAt: prepared.Plan.CreatedAt, TTL: plan.DefaultTTL,
 	}, prepared.baseline.ScriptDigest, prepared.baseline.DefaultAliasDigest)
 	if err != nil {
@@ -187,6 +199,17 @@ func activeNode(value inventory.Inventory, home string) (string, string) {
 func environment(lookup func(string) (string, bool), key string) string {
 	value, _ := lookup(key)
 	return value
+}
+
+func privatePlanInventory(value inventory.Inventory, home, nvmDirectory, temporary string) (inventory.Inventory, error) {
+	if !filepath.IsAbs(temporary) {
+		temporary = ""
+	}
+	return inventory.RedactInstallationPaths(value,
+		inventory.PathRedaction{Root: nvmDirectory, Placeholder: "$NVM_DIR"},
+		inventory.PathRedaction{Root: home, Placeholder: "$HOME"},
+		inventory.PathRedaction{Root: temporary, Placeholder: "$TMPDIR"},
+	)
 }
 
 func proxyEnvironment(lookup func(string) (string, bool)) map[string]string {

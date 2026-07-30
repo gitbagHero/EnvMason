@@ -408,9 +408,11 @@ func controlledEnvironment(options Options, network bool) ([]string, []string) {
 	} else {
 		values["COREPACK_ENABLE_NETWORK"] = "0"
 	}
+	sensitive := []string{}
 	for _, key := range proxyKeys() {
 		if value := options.ProxyValues[key]; value != "" {
 			values[key] = value
+			sensitive = append(sensitive, value)
 		}
 	}
 	keys := make([]string, 0, len(values))
@@ -419,12 +421,8 @@ func controlledEnvironment(options Options, network bool) ([]string, []string) {
 	}
 	sort.Strings(keys)
 	environment := make([]string, 0, len(keys))
-	sensitive := []string{}
 	for _, key := range keys {
 		environment = append(environment, key+"="+values[key])
-		if strings.Contains(strings.ToLower(key), "proxy") && values[key] != "" {
-			sensitive = append(sensitive, values[key])
-		}
 	}
 	for _, value := range []string{options.Home, options.Baseline.NVM.Directory, options.Baseline.NodeRoot, temporary} {
 		if value != "" && value != "/tmp" {

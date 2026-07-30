@@ -92,13 +92,17 @@ func (service Service) PrepareSet(ctx context.Context, options SetOptions) (Prep
 	if err != nil {
 		return Prepared{}, fmt.Errorf("scan before default Plan: %w", err)
 	}
-	baseline, _, err := service.inspect(value)
+	baseline, adapterOptions, err := service.inspect(value)
+	if err != nil {
+		return Prepared{}, err
+	}
+	planInventory, err := privatePlanInventory(value, adapterOptions.Home, baseline.Directory, adapterOptions.Temporary)
 	if err != nil {
 		return Prepared{}, err
 	}
 	target, _ := normalizeVersion(options.Version)
 	defaultPlan, err := plan.BuildDefaultSet(plan.DefaultSetInput{
-		Inventory: value, CreatedAt: service.now(), TargetVersion: target,
+		Inventory: planInventory, CreatedAt: service.now(), TargetVersion: target,
 		ScriptDigest: baseline.ScriptDigest, CurrentAliasDigest: baseline.DefaultAliasDigest,
 		CurrentAlias: baseline.DefaultAlias, CurrentDefaultVersion: baseline.DefaultVersion,
 	})
@@ -131,15 +135,19 @@ func (service Service) PrepareRestore(ctx context.Context, options RestoreOption
 	if err != nil {
 		return Prepared{}, fmt.Errorf("scan before recovery Plan: %w", err)
 	}
-	baseline, _, err := service.inspect(value)
+	baseline, adapterOptions, err := service.inspect(value)
 	if err != nil {
 		return Prepared{}, err
 	}
 	if baseline.DefaultAlias != after.Facts["default_alias"] || baseline.DefaultAliasDigest != after.Facts["default_alias_hash"] || baseline.DefaultVersion != after.Facts["default_version"] {
 		return Prepared{}, errors.New("NVM default changed after the source operation; refusing to overwrite it with recovery")
 	}
+	planInventory, err := privatePlanInventory(value, adapterOptions.Home, baseline.Directory, adapterOptions.Temporary)
+	if err != nil {
+		return Prepared{}, err
+	}
 	restorePlan, err := plan.BuildDefaultRestore(plan.DefaultRestoreInput{
-		Inventory: value, CreatedAt: service.now(), ScriptDigest: baseline.ScriptDigest,
+		Inventory: planInventory, CreatedAt: service.now(), ScriptDigest: baseline.ScriptDigest,
 		CurrentAliasDigest: baseline.DefaultAliasDigest, CurrentAlias: baseline.DefaultAlias, CurrentDefaultVersion: baseline.DefaultVersion,
 		OriginalAliasDigest: before.Facts["default_alias_hash"], OriginalAlias: before.Facts["default_alias"], OriginalDefaultVersion: before.Facts["default_version"],
 		SourceOperationID: source.ID, SourcePlanID: source.PlanID,
@@ -177,17 +185,23 @@ func (service Service) Execute(ctx context.Context, prepared Prepared, receipt e
 	if currentBaseline.ScriptDigest != prepared.baseline.ScriptDigest || currentBaseline.DefaultAliasDigest != prepared.baseline.DefaultAliasDigest {
 		return Result{}, errors.New("environment or NVM default changed after review; generate a new Plan")
 	}
+	planInventory, err := privatePlanInventory(
+		currentInventory, currentOptions.Home, currentBaseline.Directory, currentOptions.Temporary,
+	)
+	if err != nil {
+		return Result{}, err
+	}
 	var rebuilt plan.Plan
 	switch prepared.Plan.Actions[0].Operation {
 	case "set_default":
 		rebuilt, err = plan.BuildDefaultSet(plan.DefaultSetInput{
-			Inventory: currentInventory, CreatedAt: prepared.Plan.CreatedAt, TargetVersion: prepared.desiredVersion,
+			Inventory: planInventory, CreatedAt: prepared.Plan.CreatedAt, TargetVersion: prepared.desiredVersion,
 			ScriptDigest: prepared.baseline.ScriptDigest, CurrentAliasDigest: prepared.baseline.DefaultAliasDigest,
 			CurrentAlias: prepared.baseline.DefaultAlias, CurrentDefaultVersion: prepared.baseline.DefaultVersion,
 		})
 	case "restore_default":
 		rebuilt, err = plan.BuildDefaultRestore(plan.DefaultRestoreInput{
-			Inventory: currentInventory, CreatedAt: prepared.Plan.CreatedAt, ScriptDigest: prepared.baseline.ScriptDigest,
+			Inventory: planInventory, CreatedAt: prepared.Plan.CreatedAt, ScriptDigest: prepared.baseline.ScriptDigest,
 			CurrentAliasDigest: prepared.baseline.DefaultAliasDigest, CurrentAlias: prepared.baseline.DefaultAlias, CurrentDefaultVersion: prepared.baseline.DefaultVersion,
 			OriginalAliasDigest: prepared.originalAliasHash, OriginalAlias: prepared.originalAlias, OriginalDefaultVersion: prepared.originalVersion,
 			SourceOperationID: prepared.sourceOperationID, SourcePlanID: prepared.sourcePlanID,
@@ -307,6 +321,17 @@ func activeNode(value inventory.Inventory, home string) (string, string) {
 func environment(lookup func(string) (string, bool), key string) string {
 	value, _ := lookup(key)
 	return value
+}
+
+func privatePlanInventory(value inventory.Inventory, home, nvmDirectory, temporary string) (inventory.Inventory, error) {
+	if !filepath.IsAbs(temporary) {
+		temporary = ""
+	}
+	return inventory.RedactInstallationPaths(value,
+		inventory.PathRedaction{Root: nvmDirectory, Placeholder: "$NVM_DIR"},
+		inventory.PathRedaction{Root: home, Placeholder: "$HOME"},
+		inventory.PathRedaction{Root: temporary, Placeholder: "$TMPDIR"},
+	)
 }
 
 func normalizeVersion(raw string) (string, error) {

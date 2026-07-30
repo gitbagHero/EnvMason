@@ -25,6 +25,15 @@ func TestExecutorCompletesConfirmedRegisteredPlan(t *testing.T) {
 	if record.State != StateCompleted || record.Steps[0].State != StateCompleted || record.Steps[0].Verification.State != CheckPassed {
 		t.Fatalf("record = %#v", record)
 	}
+	if record.SchemaVersion != RecordSchemaVersion || record.ConfirmedPlan == nil || record.ConfirmedPlan.ID != request.Plan.ID {
+		t.Fatalf("confirmed Plan provenance = %#v", record.ConfirmedPlan)
+	}
+	request.Plan.Actions[0].TargetVersion = "changed-after-execution"
+	request.Plan.Actions[0].Preconditions[0].Expected = "changed-after-execution"
+	if record.ConfirmedPlan.Actions[0].TargetVersion == request.Plan.Actions[0].TargetVersion ||
+		record.ConfirmedPlan.Actions[0].Preconditions[0].Expected == request.Plan.Actions[0].Preconditions[0].Expected {
+		t.Fatal("operation record shares confirmed Plan state with caller")
+	}
 	if runner.calls != 1 || len(store.records) < 5 || store.records[len(store.records)-1].State != StateCompleted {
 		t.Fatalf("calls=%d records=%d", runner.calls, len(store.records))
 	}
@@ -60,6 +69,9 @@ func TestExecutorMapsProcessFailuresWithoutFalseCompletion(t *testing.T) {
 			}
 			if record.State != test.want || store.records[len(store.records)-1].State != test.want {
 				t.Fatalf("states = %s/%s, want %s", record.State, store.records[len(store.records)-1].State, test.want)
+			}
+			if record.ConfirmedPlan == nil || record.ConfirmedPlan.ID != request.Plan.ID {
+				t.Fatal("failed record lost confirmed Plan provenance")
 			}
 			if record.State == StateCompleted {
 				t.Fatal("failed process was marked completed")
@@ -100,6 +112,51 @@ func TestExecutorRejectsInvalidConfirmationExpiredAndMutatedPlans(t *testing.T) 
 			}
 			if len(store.records) != 0 || runner.calls != 0 {
 				t.Fatal("invalid request reached log store or process runner")
+			}
+		})
+	}
+}
+
+func TestExecutorRejectsSensitiveConfirmedPlanBeforeHistoryWrite(t *testing.T) {
+	t.Parallel()
+	const sensitive = "private-plan-value"
+	for _, source := range []string{"request", "registered command"} {
+		source := source
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			executor, request, store, runner := testHarness(t, nil)
+			value, err := plan.BuildSelfTest(plan.SelfTestInput{
+				CreatedAt: testBaseTime, OS: "darwin", OSVersion: sensitive, Architecture: "arm64",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Plan = value
+			request.Confirmation.ConfirmedPlanID = value.ID
+
+			if source == "request" {
+				request.SensitiveValues = []string{sensitive}
+			} else {
+				definition, err := executor.Registry.Resolve(value.Actions[0])
+				if err != nil {
+					t.Fatal(err)
+				}
+				build := definition.Build
+				definition.Build = func(action plan.Action) (CommandSpec, error) {
+					spec, err := build(action)
+					spec.SensitiveValues = []string{sensitive}
+					return spec, err
+				}
+				executor.Registry, err = NewRegistry(definition)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			_, err = executor.Execute(context.Background(), request)
+			assertExecutionCode(t, err, CodePlanInvalid)
+			if len(store.records) != 0 || runner.calls != 0 {
+				t.Fatal("sensitive confirmed Plan reached log store or process runner")
 			}
 		})
 	}
@@ -298,6 +355,9 @@ func TestRecoverInterruptedNeverInventsCompletion(t *testing.T) {
 	}
 	if recovered.State != StateInterrupted || recovered.Steps[0].State != StateInterrupted || recovered.State == StateCompleted {
 		t.Fatalf("recovered = %#v (execute result %#v)", recovered, record)
+	}
+	if recovered.ConfirmedPlan == nil || recovered.ConfirmedPlan.ID != request.Plan.ID {
+		t.Fatal("interrupted record lost confirmed Plan provenance")
 	}
 	if _, err := MarshalRecord(recovered); err != nil {
 		t.Fatal(err)

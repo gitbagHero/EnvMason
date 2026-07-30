@@ -59,6 +59,11 @@ func TestDefinitionsBuildFixedStructuredCommands(t *testing.T) {
 			t.Fatalf("environment does not contain %q: %s", expected, environment)
 		}
 	}
+	sensitiveValues := "\n" + strings.Join(spec.SensitiveValues, "\n") + "\n"
+	if !strings.Contains(sensitiveValues, "\nhttps://secret.invalid\n") ||
+		strings.Contains(sensitiveValues, "\n1\n") {
+		t.Fatalf("sensitive values include a control flag or omit the proxy: %#v", spec.SensitiveValues)
+	}
 
 	pnpm := findDefinition(t, Definitions(options), plan.NodeToolPNPM, plan.NodeToolProviderCorepack)
 	pnpmSpec, err := pnpm.Build(plan.Action{ToolID: plan.NodeToolPNPM, Operation: "update_version", Adapter: plan.NodeToolProviderCorepack, TargetVersion: "11.1.0"})

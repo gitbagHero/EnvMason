@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	RecordSchemaVersion         = "0.2.0"
-	PreviousRecordSchemaVersion = "0.1.0"
+	RecordSchemaVersion         = "0.3.0"
+	PreviousRecordSchemaVersion = "0.2.0"
+	LegacyRecordSchemaVersion   = "0.1.0"
 	DefaultOutputLimit          = 64 << 10
 	MaximumTimeout              = 15 * time.Minute
 )
@@ -55,6 +56,7 @@ type Record struct {
 	ID                string              `json:"id"`
 	PlanID            string              `json:"plan_id"`
 	PlanSchemaVersion string              `json:"plan_schema_version"`
+	ConfirmedPlan     *plan.Plan          `json:"confirmed_plan,omitempty"`
 	State             State               `json:"state"`
 	CreatedAt         time.Time           `json:"created_at"`
 	UpdatedAt         time.Time           `json:"updated_at"`

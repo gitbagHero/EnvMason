@@ -112,7 +112,7 @@ Plan JSON 遵循 [`schemas/plan/v0.1.0.json`](./schemas/plan/v0.1.0.json)，固�
 
 ## 受控执行、NVM Node 安装与默认切换
 
-I14 新增内部受控执行核心和 [`Plan 0.2.0`](./schemas/plan/v0.2.0.json)。I15 将当前操作记录升级为 [`Operation Record 0.2.0`](./schemas/operation/v0.2.0.json)，并保留 [`0.1.0`](./schemas/operation/v0.1.0.json) 的读取验证能力。Plan 仍只携带声明式动作身份，不包含命令、参数或可执行路径；实际进程规范只能来自核心内置注册表。执行前必须重新校验不可变 Plan ID、30 分钟有效期、环境摘要、NVM 控制文件摘要和绑定相同 Plan ID 的用户确认。
+I14 新增内部受控执行核心和 [`Plan 0.2.0`](./schemas/plan/v0.2.0.json)。I18-B 将当前操作记录升级为 [`Operation Record 0.3.0`](./schemas/operation/v0.3.0.json)，每条新记录保存与确认凭据、步骤顺序和动作身份一致的完整 `confirmed_plan`；[`0.2.0`](./schemas/operation/v0.2.0.json) 和 [`0.1.0`](./schemas/operation/v0.1.0.json) 仍可读取和验证，但因没有完整 Plan 来源而不能用于未来的通用继续流程。Plan 仍只携带声明式动作身份，不包含命令、参数或执行规范；NVM、HOME 和临时目录下的安装路径在进入 Plan 前转换为稳定占位符。实际进程规范只能来自核心内置注册表。执行前必须重新校验不可变 Plan ID、30 分钟有效期、环境摘要、NVM 控制文件摘要和绑定相同 Plan ID 的用户确认。
 
 I15 在 macOS 上公开单个 R2 NVM 安装入口。NVM 必须已经存在并有可读取的 default alias；目标必须是高于当前生效版本、且能在本次 fresh Node.js 官方 release index 中精确验证的稳定版本。先用 dry-run 审查完整 Plan：
 
@@ -128,7 +128,7 @@ envmason apply --tool runtime.node --version 24.14.0 --online
 
 CLI 会显示完整 Plan ID，并要求在交互终端逐字输入 `apply <完整 Plan ID>`。不支持 `--yes`、管道确认、配置授权、环境变量授权或 AI 代确认。安装只使用固定 `/bin/bash --noprofile --norc` 和内置 NVM 调用，采用已有 `nvm.sh` 的内容摘要、二进制安装和受控环境；安装后验证目标、原生效版本、default alias 和所有原安装。它不会修改 alias、改变当前 Shell、安装 NVM、清理失败残留或删除旧 Node。现有 `envmason plan` 继续生成 `0.1.0` 的不可执行预览。
 
-操作记录遵循平台原生状态目录：macOS 为 `~/Library/Application Support/EnvMason/operations`，Windows 为 `%LOCALAPPDATA%/EnvMason/operations`，Linux 为 `$XDG_STATE_HOME/envmason/operations`，未设置时回退到 `~/.local/state/envmason/operations`。stdout、stderr 分别限制为 64 KiB；`0.2.0` 还记录执行前后事实摘要、确定性差异和幂等跳过状态。完成状态要求动作成功且注册验证器通过，失败、取消和中断不会被报告为 Completed。
+操作记录遵循平台原生状态目录：macOS 为 `~/Library/Application Support/EnvMason/operations`，Windows 为 `%LOCALAPPDATA%/EnvMason/operations`，Linux 为 `$XDG_STATE_HOME/envmason/operations`，未设置时回退到 `~/.local/state/envmason/operations`。stdout、stderr 分别限制为 64 KiB；`0.2.0` 起记录执行前后事实摘要、确定性差异和幂等跳过状态，`0.3.0` 增加经确认的完整 Plan 来源。完成状态要求动作成功且注册验证器通过，失败、取消和中断不会被报告为 Completed。
 
 I16 在 macOS 上增加 [`Plan 0.3.0`](./schemas/plan/v0.3.0.json) 的单动作 R3 默认版本切换。目标必须已由 NVM 安装，不需要联网。先只读审查原 alias、原解析版本和精确目标：
 

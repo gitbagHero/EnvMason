@@ -44,6 +44,13 @@ func TestSetAndRestoreDefaultWithIndependentConfirmedPlans(t *testing.T) {
 	if setResult.Record.State != execution.StateCompleted || readDefaultAlias(t, directory) != "v24.14.0" {
 		t.Fatalf("set result = %#v, alias=%q", setResult, readDefaultAlias(t, directory))
 	}
+	recordJSON, err := execution.MarshalRecord(setResult.Record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(recordJSON), directory) || !strings.Contains(string(recordJSON), "$NVM_DIR") {
+		t.Fatalf("default operation record leaked private Plan path: %s", recordJSON)
+	}
 	step := setResult.Record.Steps[0]
 	if step.Before == nil || step.After == nil || step.Before.Facts["default_alias"] != "22" || step.After.Facts["default_alias"] != "v24.14.0" {
 		t.Fatalf("set snapshots = %#v", step)
