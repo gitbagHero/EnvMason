@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,27 @@ func TestValidateOptionsRequiresExactSelectedTargets(t *testing.T) {
 		if err := ValidateOptions(value); err == nil {
 			t.Fatalf("ValidateOptions(%#v) succeeded", value)
 		}
+	}
+}
+
+func TestPrepareRejectsUnsupportedPlatformBeforeScan(t *testing.T) {
+	scanCalled := false
+	service := Service{
+		GOOS: "windows",
+		Scan: func(context.Context) (inventory.Inventory, error) {
+			scanCalled = true
+			return inventory.Inventory{}, nil
+		},
+	}
+	_, err := service.Prepare(context.Background(), Options{
+		NodeVersion: "24.12.0",
+		NPMVersion:  "12.0.1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported on windows") {
+		t.Fatalf("error = %v", err)
+	}
+	if scanCalled {
+		t.Fatal("unsupported platform reached environment scan")
 	}
 }
 
@@ -121,6 +143,7 @@ func (runner serviceRunner) Run(_ context.Context, spec execution.CommandSpec) e
 
 func nodeToolsServiceFixture(t *testing.T) (Service, string, string) {
 	t.Helper()
+	requirePOSIXFixture(t)
 	home := t.TempDir()
 	directory := filepath.Join(home, ".nvm")
 	writeServiceFixture(t, filepath.Join(directory, "nvm.sh"), "fixture", 0o644)
@@ -157,6 +180,13 @@ func nodeToolsServiceFixture(t *testing.T) (Service, string, string) {
 		Runner: serviceRunner{versions: map[string]string{}}, HistoryRoot: t.TempDir(),
 	}
 	return service, filepath.Join(root, "bin", "npm"), node
+}
+
+func requirePOSIXFixture(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Node ancillary-tool service fixture uses POSIX execute permissions and symlinks")
+	}
 }
 
 func writeServicePackage(t *testing.T, root, name, version, entry string) {

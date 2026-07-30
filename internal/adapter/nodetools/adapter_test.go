@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -170,6 +171,7 @@ func findDefinition(t *testing.T, definitions []execution.Definition, toolID, pr
 
 func nodeToolsFixture(t *testing.T) string {
 	t.Helper()
+	requirePOSIXFixture(t)
 	directory := t.TempDir()
 	writeFixture(t, filepath.Join(directory, "nvm.sh"), "fixture", 0o644)
 	writeFixture(t, filepath.Join(directory, "alias", "default"), "v24.12.0\n", 0o644)
@@ -182,6 +184,13 @@ func nodeToolsFixture(t *testing.T) string {
 	}
 	writeFixture(t, filepath.Join(root, "lib", "node_modules", "corepack", "dist", "pnpm.js"), "pnpm", 0o644)
 	return directory
+}
+
+func requirePOSIXFixture(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Node ancillary-tool fixture uses POSIX execute permissions and symlinks")
+	}
 }
 
 func writePackage(t *testing.T, root, name, version, entry string) {
