@@ -38,6 +38,12 @@ func renderSummary(value Plan) []byte {
 	fmt.Fprintf(&output, "Environment digest: %s\n", plain(value.EnvironmentDigest))
 	fmt.Fprintf(&output, "Policy digest: %s\n", plain(value.PolicyDigest))
 	fmt.Fprintf(&output, "Summary: %s\n", plain(value.Summary))
+	if value.Continuation != nil {
+		fmt.Fprintf(&output, "Continuation source: operation=%s | plan=%s | freshly prepared plan=%s\n",
+			plain(value.Continuation.SourceOperationID), plain(value.Continuation.SourcePlanID), plain(value.Continuation.PreparedPlanID))
+		fmt.Fprintf(&output, "Reusable checkpoints: %d | checkpoint-satisfied dependencies: %d\n",
+			len(value.Continuation.ReusableCheckpoints), len(value.Continuation.SatisfiedDependencies))
+	}
 	fmt.Fprintln(&output, "Actions:")
 	for _, action := range value.Actions {
 		fmt.Fprintf(&output, "  %s: %s %s via %s | risk=%s | confirmation=%s | elevation=%t | restart=%t\n", plain(action.ID), plain(action.Operation), plain(action.TargetVersion), plain(action.Adapter), action.Risk, plain(action.Confirmation.Scope), action.ElevationRequired, action.RestartRequired)
@@ -58,7 +64,11 @@ func renderSummary(value Plan) []byte {
 			fmt.Fprintln(&output, "This executable Plan requires exact plan-level confirmation before any action can run.")
 		}
 	} else {
-		fmt.Fprintln(&output, "This I13 preview cannot execute or modify the system.")
+		if value.SchemaVersion == ContinuationSchemaVersion {
+			fmt.Fprintln(&output, "This review-only continuation Plan cannot execute or modify the system.")
+		} else {
+			fmt.Fprintln(&output, "This I13 preview cannot execute or modify the system.")
+		}
 	}
 	return output.Bytes()
 }

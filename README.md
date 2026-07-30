@@ -4,7 +4,7 @@ EnvMason 是面向 macOS、Windows 和 Linux 的开发者工作站生命周期�
 
 ## 当前状态
 
-**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 已开始，当前具有多动作 DAG 失败隔离、经确认的完整 Plan 来源，以及对部分失败记录进行只读检查点资格判定的内部核心；继续/恢复 Plan、完整 Node 工作流和公开继续入口仍未实现。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
+**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 已开始，当前具有多动作 DAG 失败隔离、经确认的完整 Plan 来源、部分失败记录的只读检查点资格判定，以及生成审查态继续 Plan 的内部核心；真正的继续执行、恢复 Plan、完整 Node 工作流和公开继续入口仍未实现。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
 
 核心原则：
 
@@ -112,7 +112,7 @@ Plan JSON 遵循 [`schemas/plan/v0.1.0.json`](./schemas/plan/v0.1.0.json)，固�
 
 ## 受控执行、NVM Node 安装与默认切换
 
-I14 新增内部受控执行核心和 [`Plan 0.2.0`](./schemas/plan/v0.2.0.json)。I18-B 将当前操作记录升级为 [`Operation Record 0.3.0`](./schemas/operation/v0.3.0.json)，每条新记录保存与确认凭据、步骤顺序和动作身份一致的完整 `confirmed_plan`；[`0.2.0`](./schemas/operation/v0.2.0.json) 和 [`0.1.0`](./schemas/operation/v0.1.0.json) 仍可读取和验证，但因没有完整 Plan 来源而不能用于未来的通用继续流程。Plan 仍只携带声明式动作身份，不包含命令、参数或执行规范；NVM、HOME 和临时目录下的安装路径在进入 Plan 前转换为稳定占位符。实际进程规范只能来自核心内置注册表。执行前必须重新校验不可变 Plan ID、30 分钟有效期、环境摘要、NVM 控制文件摘要和绑定相同 Plan ID 的用户确认。
+I14 新增内部受控执行核心和 [`Plan 0.2.0`](./schemas/plan/v0.2.0.json)。I18-B 将当前操作记录升级为 [`Operation Record 0.3.0`](./schemas/operation/v0.3.0.json)，每条新记录保存与确认凭据、步骤顺序和动作身份一致的完整 `confirmed_plan`；[`0.2.0`](./schemas/operation/v0.2.0.json) 和 [`0.1.0`](./schemas/operation/v0.1.0.json) 仍可读取和验证，但因没有完整 Plan 来源而不能用于未来的通用继续流程。I18-D 新增审查态 [`Plan 0.4.0`](./schemas/plan/v0.4.0.json)，用于把来源记录、新鲜检查点证据和重新准备的剩余动作绑定成新的不可变 Plan。Plan 仍只携带声明式动作身份，不包含命令、参数或执行规范；NVM、HOME 和临时目录下的安装路径在进入 Plan 前转换为稳定占位符。实际进程规范只能来自核心内置注册表。执行前必须重新校验不可变 Plan ID、30 分钟有效期、环境摘要、NVM 控制文件摘要和绑定相同 Plan ID 的用户确认。
 
 I15 在 macOS 上公开单个 R2 NVM 安装入口。NVM 必须已经存在并有可读取的 default alias；目标必须是高于当前生效版本、且能在本次 fresh Node.js 官方 release index 中精确验证的稳定版本。先用 dry-run 审查完整 Plan：
 
@@ -130,7 +130,9 @@ CLI 会显示完整 Plan ID，并要求在交互终端逐字输入 `apply <完�
 
 操作记录遵循平台原生状态目录：macOS 为 `~/Library/Application Support/EnvMason/operations`，Windows 为 `%LOCALAPPDATA%/EnvMason/operations`，Linux 为 `$XDG_STATE_HOME/envmason/operations`，未设置时回退到 `~/.local/state/envmason/operations`。stdout、stderr 分别限制为 64 KiB；`0.2.0` 起记录执行前后事实摘要、确定性差异和幂等跳过状态，`0.3.0` 增加经确认的完整 Plan 来源。完成状态要求动作成功且注册验证器通过，失败、取消和中断不会被报告为 Completed。
 
-I18-C 增加内部只读检查点资格判定。只有 Operation Record `0.3.0` 中已经 Completed、验证 Passed、具有 After Snapshot，并通过注册适配器新鲜动作级复核的步骤，才可作为未来继续 Plan 的可复用候选；旧记录、活动记录、缺失证据或发生版本、provider、所有权、NVM 控制状态漂移的记录会以稳定原因码阻断。本阶段不生成或执行继续 Plan，也没有公开 CLI 入口。
+I18-C 增加内部只读检查点资格判定。只有 Operation Record `0.3.0` 中已经 Completed、验证 Passed、具有 After Snapshot，并通过注册适配器新鲜动作级复核的步骤，才可作为继续 Plan 的可复用候选；旧记录、活动记录、缺失证据或发生版本、provider、所有权、NVM 控制状态漂移的记录会以稳定原因码阻断。
+
+I18-D 在 Eligible 判定上生成 Plan `0.4.0`。它绑定来源 Operation/Plan、重新观察的检查点 digest、来源动作顺序、重新准备的 Plan ID，以及由检查点满足的依赖边；动作列表只包含剩余 R1/R2 动作，并使用来源终态后新 Plan 的环境、策略和原 30 分钟时窗。Plan `0.4.0` 固定为 `"executable": false`，现有执行器会在注册表解析、历史写入和进程启动前拒绝；本阶段仍没有公开 CLI，也不能真正继续或恢复操作。
 
 I16 在 macOS 上增加 [`Plan 0.3.0`](./schemas/plan/v0.3.0.json) 的单动作 R3 默认版本切换。目标必须已由 NVM 安装，不需要联网。先只读审查原 alias、原解析版本和精确目标：
 

@@ -299,11 +299,19 @@ func buildFixture() BuildInput {
 
 func clonePlan(value Plan) Plan {
 	result := value
+	result.Environment.Installations = append([]InstallationSummary{}, value.Environment.Installations...)
 	result.Actions = append([]Action{}, value.Actions...)
 	for index := range result.Actions {
 		result.Actions[index].Dependencies = append([]string{}, value.Actions[index].Dependencies...)
 		result.Actions[index].Preconditions = append([]Check{}, value.Actions[index].Preconditions...)
 		result.Actions[index].Verifications = append([]Check{}, value.Actions[index].Verifications...)
+	}
+	if value.Continuation != nil {
+		continuation := *value.Continuation
+		continuation.SourceActionIDs = append([]string{}, value.Continuation.SourceActionIDs...)
+		continuation.ReusableCheckpoints = append([]CheckpointBinding{}, value.Continuation.ReusableCheckpoints...)
+		continuation.SatisfiedDependencies = append([]SatisfiedDependency{}, value.Continuation.SatisfiedDependencies...)
+		result.Continuation = &continuation
 	}
 	return result
 }

@@ -9,6 +9,7 @@ const (
 	SchemaVersion                   = "0.1.0"
 	ExecutableSchemaVersion         = "0.2.0"
 	HighRiskExecutableSchemaVersion = "0.3.0"
+	ContinuationSchemaVersion       = "0.4.0"
 	DefaultTTL                      = 30 * time.Minute
 )
 
@@ -33,6 +34,30 @@ type Plan struct {
 	PolicyDigest      string             `json:"policy_digest"`
 	Environment       EnvironmentSummary `json:"environment"`
 	Actions           []Action           `json:"actions"`
+	Continuation      *Continuation      `json:"continuation,omitempty"`
+}
+
+// Continuation binds a review-only Plan to the terminal operation, confirmed
+// Plan, freshly prepared remaining Plan and revalidated checkpoints that
+// produced it. It deliberately contains no command or process specification.
+type Continuation struct {
+	SourceOperationID     string                `json:"source_operation_id"`
+	SourcePlanID          string                `json:"source_plan_id"`
+	PreparedPlanID        string                `json:"prepared_plan_id"`
+	SourceActionIDs       []string              `json:"source_action_ids"`
+	ReusableCheckpoints   []CheckpointBinding   `json:"reusable_checkpoints"`
+	SatisfiedDependencies []SatisfiedDependency `json:"satisfied_dependencies"`
+}
+
+type CheckpointBinding struct {
+	ActionID            string `json:"action_id"`
+	RecordedAfterDigest string `json:"recorded_after_digest"`
+	ObservedDigest      string `json:"observed_digest"`
+}
+
+type SatisfiedDependency struct {
+	ActionID           string `json:"action_id"`
+	DependencyActionID string `json:"dependency_action_id"`
 }
 
 type EnvironmentSummary struct {

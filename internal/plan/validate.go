@@ -15,7 +15,8 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`
 var operationIDPattern = regexp.MustCompile(`^op-[a-f0-9]{32}$`)
 
 func Validate(value Plan) error {
-	if value.SchemaVersion != SchemaVersion && value.SchemaVersion != ExecutableSchemaVersion && value.SchemaVersion != HighRiskExecutableSchemaVersion {
+	if value.SchemaVersion != SchemaVersion && value.SchemaVersion != ExecutableSchemaVersion &&
+		value.SchemaVersion != HighRiskExecutableSchemaVersion && value.SchemaVersion != ContinuationSchemaVersion {
 		return fmt.Errorf("validate plan: unsupported schema_version %q", value.SchemaVersion)
 	}
 	if !digestPattern.MatchString(value.ID) || !digestPattern.MatchString(value.EnvironmentDigest) || !digestPattern.MatchString(value.PolicyDigest) {
@@ -32,6 +33,15 @@ func Validate(value Plan) error {
 	}
 	if value.SchemaVersion == HighRiskExecutableSchemaVersion && !value.Executable {
 		return errors.New("validate plan: Plan 0.3.0 must be executable")
+	}
+	if value.SchemaVersion == ContinuationSchemaVersion && value.Executable {
+		return errors.New("validate plan: Plan 0.4.0 must be a non-executable continuation draft")
+	}
+	if value.SchemaVersion != ContinuationSchemaVersion && value.Continuation != nil {
+		return errors.New("validate plan: continuation provenance requires Plan 0.4.0")
+	}
+	if value.SchemaVersion == ContinuationSchemaVersion && value.Continuation == nil {
+		return errors.New("validate plan: Plan 0.4.0 requires continuation provenance")
 	}
 	if strings.TrimSpace(value.Summary) == "" || len(value.Actions) == 0 {
 		return errors.New("validate plan: summary and actions are required")
@@ -64,6 +74,11 @@ func Validate(value Plan) error {
 			if _, exists := actions[dependency]; !exists {
 				return fmt.Errorf("validate plan: action %q has unknown dependency %q", action.ID, dependency)
 			}
+		}
+	}
+	if value.Continuation != nil {
+		if err := validateContinuation(*value.Continuation, value.Actions); err != nil {
+			return fmt.Errorf("validate plan: continuation: %w", err)
 		}
 	}
 	if hasCycle(actions) {
@@ -136,8 +151,9 @@ func validateAction(schemaVersion string, action Action) error {
 	if schemaVersion == SchemaVersion && riskRank(action.Risk) < riskRank(RiskR2) {
 		return errors.New("install_version risk cannot be lower than R2")
 	}
-	if schemaVersion == ExecutableSchemaVersion && action.Risk != RiskR1 && action.Risk != RiskR2 {
-		return errors.New("Plan 0.2.0 only permits R1 and R2 actions")
+	if (schemaVersion == ExecutableSchemaVersion || schemaVersion == ContinuationSchemaVersion) &&
+		action.Risk != RiskR1 && action.Risk != RiskR2 {
+		return fmt.Errorf("Plan %s only permits R1 and R2 actions", schemaVersion)
 	}
 	if schemaVersion == HighRiskExecutableSchemaVersion && action.Risk != RiskR3 {
 		return errors.New("Plan 0.3.0 requires R3 risk")
@@ -226,7 +242,8 @@ func riskRank(value Risk) int {
 }
 
 func validCheckKind(schemaVersion, value string) bool {
-	if schemaVersion == ExecutableSchemaVersion || schemaVersion == HighRiskExecutableSchemaVersion {
+	if schemaVersion == ExecutableSchemaVersion || schemaVersion == HighRiskExecutableSchemaVersion ||
+		schemaVersion == ContinuationSchemaVersion {
 		return identifierPattern.MatchString(value)
 	}
 	switch value {
@@ -236,6 +253,83 @@ func validCheckKind(schemaVersion, value string) bool {
 	default:
 		return false
 	}
+}
+
+func validateContinuation(value Continuation, actions []Action) error {
+	if !operationIDPattern.MatchString(value.SourceOperationID) ||
+		!digestPattern.MatchString(value.SourcePlanID) ||
+		!digestPattern.MatchString(value.PreparedPlanID) {
+		return errors.New("source operation, source Plan and prepared Plan identities are required")
+	}
+	if len(value.SourceActionIDs) == 0 {
+		return errors.New("source action order is required")
+	}
+
+	sourcePositions := make(map[string]int, len(value.SourceActionIDs))
+	for index, actionID := range value.SourceActionIDs {
+		if !actionIDPattern.MatchString(actionID) {
+			return errors.New("source action identity is invalid")
+		}
+		if _, duplicate := sourcePositions[actionID]; duplicate {
+			return errors.New("source action identities must be unique")
+		}
+		sourcePositions[actionID] = index
+	}
+
+	remaining := make(map[string]bool, len(actions))
+	lastPosition := -1
+	for _, action := range actions {
+		position, exists := sourcePositions[action.ID]
+		if !exists || remaining[action.ID] || position <= lastPosition {
+			return errors.New("remaining actions must preserve a unique subset of source action order")
+		}
+		remaining[action.ID] = true
+		lastPosition = position
+	}
+
+	checkpoints := make(map[string]bool, len(value.ReusableCheckpoints))
+	lastPosition = -1
+	for _, checkpoint := range value.ReusableCheckpoints {
+		position, exists := sourcePositions[checkpoint.ActionID]
+		if !exists || remaining[checkpoint.ActionID] || checkpoints[checkpoint.ActionID] ||
+			!digestPattern.MatchString(checkpoint.RecordedAfterDigest) ||
+			!digestPattern.MatchString(checkpoint.ObservedDigest) ||
+			position <= lastPosition {
+			return errors.New("reusable checkpoints are invalid, duplicated, overlapping or out of source order")
+		}
+		checkpoints[checkpoint.ActionID] = true
+		lastPosition = position
+	}
+	if len(remaining)+len(checkpoints) != len(value.SourceActionIDs) {
+		return errors.New("remaining actions and reusable checkpoints must partition the source actions")
+	}
+	for _, actionID := range value.SourceActionIDs {
+		if !remaining[actionID] && !checkpoints[actionID] {
+			return errors.New("source action is neither remaining nor reusable")
+		}
+	}
+
+	dependencies := make(map[string]bool, len(value.SatisfiedDependencies))
+	lastActionPosition := -1
+	lastDependencyPosition := -1
+	for _, dependency := range value.SatisfiedDependencies {
+		actionPosition, actionExists := sourcePositions[dependency.ActionID]
+		dependencyPosition, dependencyExists := sourcePositions[dependency.DependencyActionID]
+		key := dependency.ActionID + "\x00" + dependency.DependencyActionID
+		if !actionExists || !dependencyExists || !remaining[dependency.ActionID] ||
+			!checkpoints[dependency.DependencyActionID] || dependencyPosition >= actionPosition ||
+			dependencies[key] {
+			return errors.New("satisfied dependency is invalid or duplicated")
+		}
+		if actionPosition < lastActionPosition ||
+			(actionPosition == lastActionPosition && dependencyPosition <= lastDependencyPosition) {
+			return errors.New("satisfied dependencies must preserve source action order")
+		}
+		dependencies[key] = true
+		lastActionPosition = actionPosition
+		lastDependencyPosition = dependencyPosition
+	}
+	return nil
 }
 
 func hasCycle(actions map[string]Action) bool {
