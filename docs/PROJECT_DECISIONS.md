@@ -604,3 +604,17 @@
 - 远程检查：首次 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/30338105851) 的 Ubuntu 和 macOS 任务通过，Windows 因 POSIX fixture 执行位不适用而失败；修复仅在测试层跳过依赖 Unix 权限与符号链接的 fixture，并保留 Windows 平台在环境扫描前拒绝写执行的独立测试，没有放宽生产安全校验。修复后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/30509363380) 在 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务中全部成功。
 - 限制：未对宿主执行真实 npm/Corepack/pnpm 更新；联网下载、远端包不存在、真实缓存/磁盘失败和真实进程中断仍应优先在可恢复环境验证。该限制不开放宿主写入或扩大 I17 范围。
 - 结论：I17 已由维护者确认验收，远程 CI 门禁已通过并进入 I18-A。
+
+## I18-A 验收记录
+
+- 增量：I18-A 多动作 DAG 失败隔离基线（不是完整 I18）
+- 开始、完成与检查日期：2026-07-30
+- 客观检查状态：Passed
+- 范围确认：Accepted（维护者接受一小时时间盒方案，并在 I17 远程门禁通过后授权继续开发和推送）
+- 用户价值与范围检查：多动作流程中的失败不会启动后续依赖，进程成功但验证失败也不会产生虚假 Completed。本增量只固化已有确定性执行语义，不新增公开命令、Schema、确认方式或写能力。
+- 失败矩阵检查：使用 npm → Corepack → pnpm 三动作 R2 DAG，在每一步分别注入进程失败和验证失败，共六个场景。每个场景都断言此前步骤为 Completed 且验证 Passed，当前步骤为 Failed，后续步骤保持 Pending、没有开始时间或调用记录，最终 Failed 已持久化且 Operation Record 语义验证通过。
+- 实现检查：现有执行器的拓扑顺序、首个失败停止和最终验证门禁已满足 D-028，因此本增量只增加回归证据，没有重写或放宽生产执行核心。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off go test -count=1 ./internal/execution` 以及 Linux/Windows amd64 目标构建均通过。
+- 远程检查：[main CI](https://github.com/gitbagHero/EnvMason/actions/runs/30509651704) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务全部成功；新增 DAG 矩阵在两个 Windows 任务中实际运行通过。
+- N/A：本增量不生成继续/恢复 Plan，不重新验证跨运行检查点，不定义环境漂移策略，不混合 R2/R3 Action，不执行真实包管理器写入，也不声称完成整个 I18。
+- 结论：I18-A 客观验收完成；项目仍停留在 I18，下一最小增量必须先冻结检查点与新 Plan 生成契约。
