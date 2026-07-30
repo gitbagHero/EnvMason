@@ -2,6 +2,7 @@ package nodetools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -100,6 +101,93 @@ func TestDefinitionVerifiesCorepackProxyAndNodeVersion(t *testing.T) {
 	}
 }
 
+func TestDefinitionRevalidatesActionScopedCheckpointAndRejectsOwnedToolDrift(t *testing.T) {
+	directory := nodeToolsFixture(t)
+	baseline, err := Inspect(directory, "24.12.0", "v26.5.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := versionRunner{versions: map[string]string{
+		baseline.NPM.Executable: "11.6.2\n",
+		baseline.NodeBinary:     "v24.12.0\n",
+	}}
+	options := Options{
+		Baseline: baseline, Targets: Targets{NPM: "11.6.2"},
+		Home: t.TempDir(), Temporary: t.TempDir(), Verifier: runner,
+	}
+	definition := findDefinition(t, Definitions(options), plan.NodeToolNPM, plan.NodeToolProviderNPM)
+	action := nodeToolCheckpointAction(baseline, plan.NodeToolNPM, plan.NodeToolProviderNPM, "11.6.2")
+	recorded, err := definition.Capture(t.Context(), action)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	corepackMetadata := filepath.Join(baseline.Corepack.PackageRoot, "package.json")
+	if err := os.WriteFile(corepackMetadata, []byte(`{"name":"corepack","version":"0.35.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := definition.RevalidateCheckpoint(t.Context(), action, recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), directory) || strings.Contains(string(data), "corepack") ||
+		evidence.Facts["tool_version"] != "11.6.2" || evidence.Facts["tool_path"] != "bin/npm" {
+		t.Fatalf("action-scoped checkpoint evidence = %s", data)
+	}
+
+	defaultAlias := filepath.Join(baseline.NVM.Directory, "alias", "default")
+	if err := os.WriteFile(defaultAlias, []byte("v24.14.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := definition.RevalidateCheckpoint(t.Context(), action, recorded); err == nil {
+		t.Fatal("NVM default alias drift was accepted")
+	}
+	if err := os.WriteFile(defaultAlias, []byte("v24.12.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	npmMetadata := filepath.Join(baseline.NPM.PackageRoot, "package.json")
+	if err := os.WriteFile(npmMetadata, []byte(`{"name":"npm","version":"11.6.3"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := definition.RevalidateCheckpoint(t.Context(), action, recorded); err == nil {
+		t.Fatal("owned npm package drift was accepted")
+	}
+}
+
+func TestDefinitionRevalidatesCorepackManagedPNPMWithReadOnlyVersionProbe(t *testing.T) {
+	baseline, err := Inspect(nodeToolsFixture(t), "24.12.0", "v26.5.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	versions := map[string]string{
+		baseline.PNPM.Executable: "10.0.0\n",
+		baseline.NodeBinary:      "v24.12.0\n",
+	}
+	options := Options{
+		Baseline: baseline, Targets: Targets{PNPM: "10.0.0"},
+		Home: t.TempDir(), Temporary: t.TempDir(), Verifier: versionRunner{versions: versions},
+	}
+	definition := findDefinition(t, Definitions(options), plan.NodeToolPNPM, plan.NodeToolProviderCorepack)
+	action := nodeToolCheckpointAction(baseline, plan.NodeToolPNPM, plan.NodeToolProviderCorepack, "10.0.0")
+	recorded, err := definition.Capture(t.Context(), action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := definition.RevalidateCheckpoint(t.Context(), action, recorded)
+	if err != nil || evidence.Facts["reported_tool_version"] != "10.0.0" {
+		t.Fatalf("evidence = %#v, %v", evidence, err)
+	}
+	versions[baseline.PNPM.Executable] = "10.0.1\n"
+	if _, err := definition.RevalidateCheckpoint(t.Context(), action, recorded); err == nil {
+		t.Fatal("Corepack-managed pnpm version drift was accepted")
+	}
+}
+
 func TestInspectAndBuildIndependentPNPMThroughTargetNPM(t *testing.T) {
 	directory := nodeToolsFixture(t)
 	root := filepath.Join(directory, "versions", "node", "v24.12.0")
@@ -172,6 +260,20 @@ func findDefinition(t *testing.T, definitions []execution.Definition, toolID, pr
 	}
 	t.Fatalf("definition %s/%s not found", toolID, provider)
 	return execution.Definition{}
+}
+
+func nodeToolCheckpointAction(baseline Baseline, toolID, provider, target string) plan.Action {
+	return plan.Action{
+		ToolID: toolID, Operation: "update_version", Adapter: provider, TargetVersion: target,
+		Preconditions: []plan.Check{
+			{Kind: "adapter_script_digest_matches", Expected: baseline.NVM.ScriptDigest},
+			{Kind: "default_alias_digest_matches", Expected: baseline.NVM.DefaultAliasDigest},
+			{Kind: "target_node_version_installed", Expected: "v" + baseline.NodeVersion},
+		},
+		Verifications: []plan.Check{
+			{Kind: "active_version_unchanged", Expected: baseline.NVM.ActiveVersion},
+		},
+	}
 }
 
 func nodeToolsFixture(t *testing.T) string {

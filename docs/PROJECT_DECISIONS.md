@@ -274,6 +274,15 @@
 - 决定：Operation Record `0.2.0` 和 `0.1.0` 保持完整读取与语义验证能力，但因缺少可由 Plan ID 复核的完整来源 Plan，不得作为未来通用继续 Plan 的来源。I16 已有的单动作 default restore 仍按其专用快照契约工作，不被本决定追溯禁止。
 - 非范围：本增量不生成继续/恢复 Plan，不重新扫描或验证检查点，不增加 CLI，不升级 Plan Schema，不定义 R2/R3 混合 DAG 确认，也不执行新的系统写操作。
 
+### D-030：I18-C 检查点资格判定
+
+- 状态：Accepted（维护者于 2026-07-30 确认三小时时间盒方案并指示开始开发）
+- 决定：继续 Plan 生成前必须先完成独立的只读资格判定。来源只接受带完整 `confirmed_plan` 的 Operation Record `0.3.0`，且必须是 Failed、TimedOut、Cancelled 或 Interrupted 终态；活动记录必须先经 `RecoverInterrupted` 固化，Completed、旧 Schema、篡改记录或没有剩余动作的记录均不得产生可继续结论。
+- 决定：只有原记录中状态为 Completed、验证为 Passed、具有合法 After Snapshot，且其依赖检查点已经通过新鲜复核的动作，才能列为可复用检查点。Pending、Failed、TimedOut、Cancelled 和 Interrupted 动作始终列入待执行集合，不得因当前环境看似已满足目标而追认成已完成。
+- 决定：检查点复核由确定性注册表中的只读 `RevalidateCheckpoint` 能力完成；核心不得调用动作 `Build`、启动写执行或写入历史。复核器必须按动作作用域比较目标版本、provider、所有权、控制摘要和关键环境不变量，返回不含原始路径或命令输出的证据摘要。为取得精确工具版本，适配器可以复用已有受控只读版本探测。
+- 决定：不直接比较完整 After Snapshot，因为后续合法动作可能改变同一广域快照中的其他工具字段。任一已完成检查点缺少复核器、缺少快照、证据非法或发生漂移时，整个继续候选按稳定原因码阻断；本增量不允许独立分支绕过漂移继续。
+- 非范围：本增量不新增 Plan 或 Operation Record Schema，不生成、确认或执行继续/恢复 Plan，不增加 CLI，不支持 R2/R3 混合 DAG，不自动回滚，不迁移历史存储，也不声称完成 FR-046。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -626,3 +635,16 @@
 - 远程检查：[main CI](https://github.com/gitbagHero/EnvMason/actions/runs/30509651704) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务全部成功；新增 DAG 矩阵在两个 Windows 任务中实际运行通过。
 - N/A：本增量不生成继续/恢复 Plan，不重新验证跨运行检查点，不定义环境漂移策略，不混合 R2/R3 Action，不执行真实包管理器写入，也不声称完成整个 I18。
 - 结论：I18-A 客观验收完成；项目仍停留在 I18，下一最小增量必须先冻结检查点与新 Plan 生成契约。
+
+## I18-B 验收记录
+
+- 增量：I18-B 确认 Plan 来源固化
+- 开始、本地检查与远程门禁日期：2026-07-30
+- 客观检查状态：Passed
+- 维护者验收：Accepted（维护者确认开始开发，并在本地候选通过后分别授权提交和推送）
+- 来源固化检查：Operation Record `0.3.0` 保存经确认的完整 Plan；Plan ID、Schema、确认凭据、步骤数量、拓扑顺序和动作身份任一不一致时拒绝持久化或读取。记录持有独立深拷贝，调用方后续修改不会改变审计来源。
+- 兼容与边界检查：Operation Record `0.2.0` 和 `0.1.0` 继续读取验证，但不能作为通用继续来源；本增量未生成继续/恢复 Plan，未新增 CLI 或写能力。
+- 敏感信息检查：NVM、HOME 和临时目录下的安装路径在进入 Plan ID 前使用稳定占位符；确认 Plan 命中请求或注册执行规范声明的敏感值时，在创建 Operation ID、写历史或启动进程前拒绝。Node tools 的代理控制开关不再被错误当作用户代理秘密。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、JSON、`git diff --check`、`GOPROXY=off` 核心测试及 Linux/Windows amd64 目标构建均通过。
+- 远程检查：[main CI #30511127028](https://github.com/gitbagHero/EnvMason/actions/runs/30511127028) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务全部成功。
+- 结论：I18-B 已完成验收；I18-C 只能在该来源契约上做只读检查点资格判定，不能直接开放继续执行。

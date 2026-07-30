@@ -19,13 +19,14 @@ type ActionKey struct {
 func (key ActionKey) String() string { return key.ToolID + "/" + key.Operation + "/" + key.Adapter }
 
 type Definition struct {
-	Key         ActionKey
-	MinimumRisk plan.Risk
-	Build       func(plan.Action) (CommandSpec, error)
-	Preflight   func(context.Context, plan.Action) error
-	Capture     func(context.Context, plan.Action) (Snapshot, error)
-	Satisfied   func(context.Context, plan.Action) (bool, error)
-	Verify      func(context.Context, plan.Action, ProcessResult) error
+	Key                  ActionKey
+	MinimumRisk          plan.Risk
+	Build                func(plan.Action) (CommandSpec, error)
+	Preflight            func(context.Context, plan.Action) error
+	Capture              func(context.Context, plan.Action) (Snapshot, error)
+	Satisfied            func(context.Context, plan.Action) (bool, error)
+	Verify               func(context.Context, plan.Action, ProcessResult) error
+	RevalidateCheckpoint func(context.Context, plan.Action, Snapshot) (Snapshot, error)
 }
 
 type Registry struct {

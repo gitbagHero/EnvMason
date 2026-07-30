@@ -289,6 +289,9 @@ func definition(toolID, provider string, options Options) execution.Definition {
 			}
 			return nil
 		},
+		RevalidateCheckpoint: func(ctx context.Context, action plan.Action, recorded execution.Snapshot) (execution.Snapshot, error) {
+			return revalidateCheckpoint(ctx, toolID, provider, options, action, recorded)
+		},
 	}
 }
 
@@ -378,6 +381,145 @@ func capture(value Baseline) (execution.Snapshot, error) {
 		"pnpm_provider_control_hash": value.PNPM.ControlDigest,
 		"pnpm_path":                  toolPath(value.NodeRoot, value.PNPM),
 	})
+}
+
+func revalidateCheckpoint(
+	ctx context.Context,
+	toolID, provider string,
+	options Options,
+	action plan.Action,
+	recorded execution.Snapshot,
+) (execution.Snapshot, error) {
+	if action.TargetVersion != desiredTarget(options.Targets, toolID) {
+		return execution.Snapshot{}, errors.New("checkpoint action does not match its registered target")
+	}
+	expectedScriptDigest, err := actionCheckExpected(action.Preconditions, "adapter_script_digest_matches")
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expectedDefaultDigest, err := actionCheckExpected(action.Preconditions, "default_alias_digest_matches")
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expectedNodeVersion, err := actionCheckExpected(action.Preconditions, "target_node_version_installed")
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expectedNodeVersion, err = exactVersion(strings.TrimPrefix(expectedNodeVersion, "v"))
+	if err != nil || expectedNodeVersion != options.Baseline.NodeVersion {
+		return execution.Snapshot{}, errors.New("checkpoint target Node.js identity is invalid")
+	}
+	expectedActiveVersion, err := actionCheckExpected(action.Verifications, "active_version_unchanged")
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expectedActiveVersion, err = exactVersion(strings.TrimPrefix(expectedActiveVersion, "v"))
+	if err != nil {
+		return execution.Snapshot{}, errors.New("checkpoint active Node.js identity is invalid")
+	}
+	current, err := Inspect(options.Baseline.NVM.Directory, options.Baseline.NodeVersion, options.Baseline.NVM.ActiveVersion)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	if current.NVM.ScriptDigest != expectedScriptDigest || current.NVM.DefaultAliasDigest != expectedDefaultDigest {
+		return execution.Snapshot{}, errors.New("NVM control files changed after the source operation")
+	}
+	actual := baselineTool(current, toolID)
+	if !actual.Present || actual.Provider != provider {
+		return execution.Snapshot{}, errors.New("checkpoint tool provider or ownership changed")
+	}
+	reportedToolVersion, err := queryVersion(ctx, options, actual.Executable)
+	if err != nil || reportedToolVersion != action.TargetVersion {
+		return execution.Snapshot{}, errors.New("checkpoint tool version changed")
+	}
+	if provider == plan.NodeToolProviderCorepack {
+		current.PNPM.Version = reportedToolVersion
+	} else if actual.Version != action.TargetVersion {
+		return execution.Snapshot{}, errors.New("checkpoint package version changed")
+	}
+	reportedNodeVersion, err := queryVersion(ctx, options, current.NodeBinary)
+	if err != nil || reportedNodeVersion != expectedNodeVersion {
+		return execution.Snapshot{}, errors.New("checkpoint target Node.js version changed")
+	}
+	reportedActiveVersion := strings.TrimPrefix(current.NVM.ActiveVersion, "v")
+	if options.ActiveBinary != "" {
+		reportedActiveVersion, err = queryVersion(ctx, options, options.ActiveBinary)
+		if err != nil {
+			return execution.Snapshot{}, errors.New("checkpoint active Node.js version could not be verified")
+		}
+	}
+	currentSnapshot, err := capture(current)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expected, err := nodeToolCheckpointEvidence(
+		recorded, toolID, action.TargetVersion, expectedNodeVersion, expectedActiveVersion,
+	)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	observed, err := nodeToolCheckpointEvidence(
+		currentSnapshot, toolID, reportedToolVersion, reportedNodeVersion, reportedActiveVersion,
+	)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	if expected.Digest != observed.Digest {
+		return execution.Snapshot{}, errors.New("checkpoint action-scoped evidence drifted")
+	}
+	return observed, nil
+}
+
+func actionCheckExpected(checks []plan.Check, kind string) (string, error) {
+	expected := ""
+	for _, check := range checks {
+		if check.Kind != kind {
+			continue
+		}
+		if expected != "" {
+			return "", errors.New("checkpoint Plan contains duplicate check metadata")
+		}
+		expected = check.Expected
+	}
+	if expected == "" {
+		return "", errors.New("checkpoint Plan is missing required check metadata")
+	}
+	return expected, nil
+}
+
+func nodeToolCheckpointEvidence(
+	value execution.Snapshot,
+	toolID, reportedToolVersion, reportedNodeVersion, reportedActiveVersion string,
+) (execution.Snapshot, error) {
+	versionKey, providerKey, controlKey, pathKey := "", "", "", ""
+	switch toolID {
+	case plan.NodeToolNPM:
+		versionKey, providerKey, controlKey, pathKey = "npm_version", "npm_provider", "npm_control_hash", "npm_path"
+	case plan.NodeToolCorepack:
+		versionKey, providerKey, controlKey, pathKey = "corepack_version", "corepack_provider", "corepack_control_hash", "corepack_path"
+	case plan.NodeToolPNPM:
+		versionKey, providerKey, controlKey, pathKey = "pnpm_package_version", "pnpm_provider", "pnpm_provider_control_hash", "pnpm_path"
+	default:
+		return execution.Snapshot{}, errors.New("unsupported Node tool checkpoint")
+	}
+	facts := map[string]string{
+		"active_version":          value.Facts["active_version"],
+		"default_alias_hash":      value.Facts["default_alias_hash"],
+		"node_version":            value.Facts["node_version"],
+		"tool_version":            value.Facts[versionKey],
+		"tool_provider":           value.Facts[providerKey],
+		"tool_control_hash":       value.Facts[controlKey],
+		"tool_path":               value.Facts[pathKey],
+		"reported_tool_version":   reportedToolVersion,
+		"reported_node_version":   reportedNodeVersion,
+		"reported_active_version": reportedActiveVersion,
+	}
+	for _, candidate := range facts {
+		if candidate == "" || candidate == "absent" || candidate == "unknown" || candidate == "outside" {
+			return execution.Snapshot{}, errors.New("Node tool checkpoint evidence is incomplete")
+		}
+	}
+	return execution.NewSnapshot(facts)
 }
 
 func controlledEnvironment(options Options, network bool) ([]string, []string) {

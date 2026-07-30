@@ -4,7 +4,7 @@ EnvMason 是面向 macOS、Windows 和 Linux 的开发者工作站生命周期�
 
 ## 当前状态
 
-**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 已开始，当前完成了多动作 DAG 在每一步发生进程或验证失败时的隔离基线；跨运行检查点、继续/恢复 Plan 和完整 Node 工作流仍未实现。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
+**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 已开始，当前具有多动作 DAG 失败隔离、经确认的完整 Plan 来源，以及对部分失败记录进行只读检查点资格判定的内部核心；继续/恢复 Plan、完整 Node 工作流和公开继续入口仍未实现。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
 
 核心原则：
 
@@ -129,6 +129,8 @@ envmason apply --tool runtime.node --version 24.14.0 --online
 CLI 会显示完整 Plan ID，并要求在交互终端逐字输入 `apply <完整 Plan ID>`。不支持 `--yes`、管道确认、配置授权、环境变量授权或 AI 代确认。安装只使用固定 `/bin/bash --noprofile --norc` 和内置 NVM 调用，采用已有 `nvm.sh` 的内容摘要、二进制安装和受控环境；安装后验证目标、原生效版本、default alias 和所有原安装。它不会修改 alias、改变当前 Shell、安装 NVM、清理失败残留或删除旧 Node。现有 `envmason plan` 继续生成 `0.1.0` 的不可执行预览。
 
 操作记录遵循平台原生状态目录：macOS 为 `~/Library/Application Support/EnvMason/operations`，Windows 为 `%LOCALAPPDATA%/EnvMason/operations`，Linux 为 `$XDG_STATE_HOME/envmason/operations`，未设置时回退到 `~/.local/state/envmason/operations`。stdout、stderr 分别限制为 64 KiB；`0.2.0` 起记录执行前后事实摘要、确定性差异和幂等跳过状态，`0.3.0` 增加经确认的完整 Plan 来源。完成状态要求动作成功且注册验证器通过，失败、取消和中断不会被报告为 Completed。
+
+I18-C 增加内部只读检查点资格判定。只有 Operation Record `0.3.0` 中已经 Completed、验证 Passed、具有 After Snapshot，并通过注册适配器新鲜动作级复核的步骤，才可作为未来继续 Plan 的可复用候选；旧记录、活动记录、缺失证据或发生版本、provider、所有权、NVM 控制状态漂移的记录会以稳定原因码阻断。本阶段不生成或执行继续 Plan，也没有公开 CLI 入口。
 
 I16 在 macOS 上增加 [`Plan 0.3.0`](./schemas/plan/v0.3.0.json) 的单动作 R3 默认版本切换。目标必须已由 NVM 安装，不需要联网。先只读审查原 alias、原解析版本和精确目标：
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	adapter "github.com/gitbagHero/EnvMason/internal/adapter/nodetools"
 	"github.com/gitbagHero/EnvMason/internal/execution"
 	"github.com/gitbagHero/EnvMason/internal/inventory"
 	"github.com/gitbagHero/EnvMason/internal/plan"
@@ -272,6 +273,28 @@ func TestExecuteRecordsVerifiedFailedAndPendingActionsSeparately(t *testing.T) {
 		result.Record.Steps[1].State != execution.StateFailed ||
 		result.Record.Steps[2].State != execution.StatePending {
 		t.Fatalf("step states = %#v", result.Record.Steps)
+	}
+	currentInventory, err := service.Scan(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, checkpointOptions, err := service.inspect(currentInventory, prepared.baseline.NodeVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpointOptions.Targets = prepared.targets
+	registry, err := execution.NewRegistry(adapter.Definitions(checkpointOptions)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assessment, err := execution.AssessContinuation(t.Context(), result.Record, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assessment.Eligible ||
+		strings.Join(assessment.ReusableActionIDs, ",") != "update-npm" ||
+		strings.Join(assessment.RemainingActionIDs, ",") != "update-corepack,update-pnpm" {
+		t.Fatalf("continuation assessment = %#v", assessment)
 	}
 }
 
