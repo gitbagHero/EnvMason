@@ -93,16 +93,37 @@ func (service Service) Prepare(ctx context.Context, options Options) (Prepared, 
 	if err != nil {
 		return Prepared{}, fmt.Errorf("scan before Node tools Plan: %w", err)
 	}
-	baseline, adapterOptions, err := service.inspect(value, options.NodeVersion)
+	targets := targetsFromOptions(options)
+	baseline, adapterOptions, err := service.inspectTargets(ctx, value, options.NodeVersion, targets)
 	if err != nil {
 		return Prepared{}, err
 	}
-	targets := adapter.Targets{
-		NPM: options.NPMVersion, Corepack: options.CorepackVersion, PNPM: options.PNPMVersion,
+	return buildPreparedPlan(value, baseline, adapterOptions, targets, service.now())
+}
+
+func (service Service) inspectTargets(
+	ctx context.Context,
+	value inventory.Inventory,
+	nodeVersion string,
+	targets adapter.Targets,
+) (adapter.Baseline, adapter.Options, error) {
+	baseline, adapterOptions, err := service.inspect(value, nodeVersion)
+	if err != nil {
+		return adapter.Baseline{}, adapter.Options{}, err
 	}
 	if err := resolveCorepackPNPM(ctx, &baseline, &adapterOptions, targets); err != nil {
-		return Prepared{}, err
+		return adapter.Baseline{}, adapter.Options{}, err
 	}
+	return baseline, adapterOptions, nil
+}
+
+func buildPreparedPlan(
+	value inventory.Inventory,
+	baseline adapter.Baseline,
+	adapterOptions adapter.Options,
+	targets adapter.Targets,
+	createdAt time.Time,
+) (Prepared, error) {
 	planTargets, err := selectedTargets(baseline, targets)
 	if err != nil {
 		return Prepared{}, err
@@ -114,7 +135,7 @@ func (service Service) Prepare(ctx context.Context, options Options) (Prepared, 
 		return Prepared{}, err
 	}
 	nodePlan, err := plan.BuildNodeTools(plan.NodeToolsInput{
-		Inventory: planInventory, CreatedAt: service.now(), NodeVersion: baseline.NodeVersion,
+		Inventory: planInventory, CreatedAt: createdAt, NodeVersion: baseline.NodeVersion,
 		NVMScriptDigest: baseline.NVM.ScriptDigest, DefaultAliasDigest: baseline.NVM.DefaultAliasDigest,
 		Targets: planTargets,
 	})
@@ -172,12 +193,9 @@ func (service Service) Execute(ctx context.Context, prepared Prepared, receipt e
 	if err != nil {
 		return Result{}, err
 	}
-	root := service.HistoryRoot
-	if root == "" {
-		root, err = execution.DefaultHistoryDirectory()
-		if err != nil {
-			return Result{}, err
-		}
+	root, err := service.historyDirectory()
+	if err != nil {
+		return Result{}, err
 	}
 	executor := execution.Executor{
 		Registry: registry, Runner: service.Runner, Store: execution.FileStore{Root: root}, Now: service.Now,
@@ -210,6 +228,12 @@ func (service Service) inspect(value inventory.Inventory, nodeVersion string) (a
 		ProxyValues: proxyEnvironment(service.LookupEnv), Verifier: service.Runner,
 	}
 	return baseline, options, nil
+}
+
+func targetsFromOptions(options Options) adapter.Targets {
+	return adapter.Targets{
+		NPM: options.NPMVersion, Corepack: options.CorepackVersion, PNPM: options.PNPMVersion,
+	}
 }
 
 func selectedTargets(baseline adapter.Baseline, targets adapter.Targets) ([]plan.NodeToolTarget, error) {
@@ -276,6 +300,13 @@ func (service Service) validate() error {
 		return errors.New("Node tools service dependencies are incomplete")
 	}
 	return nil
+}
+
+func (service Service) historyDirectory() (string, error) {
+	if service.HistoryRoot != "" {
+		return service.HistoryRoot, nil
+	}
+	return execution.DefaultHistoryDirectory()
 }
 
 func (service Service) now() time.Time {

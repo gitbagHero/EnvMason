@@ -4,7 +4,7 @@ EnvMason 是面向 macOS、Windows 和 Linux 的开发者工作站生命周期�
 
 ## 当前状态
 
-**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 已开始，当前具有多动作 DAG 失败隔离、经确认的完整 Plan 来源、部分失败记录的只读检查点资格判定，以及生成审查态继续 Plan 的内部核心；真正的继续执行、恢复 Plan、完整 Node 工作流和公开继续入口仍未实现。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
+**I00：产品契约冻结** 至 **I17：Node 附属工具更新** 已按顺序通过验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 已开始，当前具有多动作 DAG 失败隔离、经确认的完整 Plan 来源、部分失败记录的只读检查点资格判定、审查态继续 Plan 核心，以及从真实 Node tools Operation ID 经一次新鲜扫描准备继续 Plan 的内部只读服务；真正的继续执行、恢复 Plan、完整 Node 工作流和公开继续入口仍未实现。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
 
 核心原则：
 
@@ -133,6 +133,8 @@ CLI 会显示完整 Plan ID，并要求在交互终端逐字输入 `apply <完�
 I18-C 增加内部只读检查点资格判定。只有 Operation Record `0.3.0` 中已经 Completed、验证 Passed、具有 After Snapshot，并通过注册适配器新鲜动作级复核的步骤，才可作为继续 Plan 的可复用候选；旧记录、活动记录、缺失证据或发生版本、provider、所有权、NVM 控制状态漂移的记录会以稳定原因码阻断。
 
 I18-D 在 Eligible 判定上生成 Plan `0.4.0`。它绑定来源 Operation/Plan、重新观察的检查点 digest、来源动作顺序、重新准备的 Plan ID，以及由检查点满足的依赖边；动作列表只包含剩余 R1/R2 动作，并使用来源终态后新 Plan 的环境、策略和原 30 分钟时窗。Plan `0.4.0` 固定为 `"executable": false`，现有执行器会在注册表解析、历史写入和进程启动前拒绝；本阶段仍没有公开 CLI，也不能真正继续或恢复操作。
+
+I18-E 将上述核心接入 Node tools 内部服务。调用方只提供已有 Operation ID；服务从已确认的 Node tools Plan 提取 Node 版本、工具目标和 provider，严格拒绝旧记录、活动或完成记录、非 Node tools 来源及来源元数据替换，并在一次当前扫描上复核检查点、重新准备剩余动作和生成 Plan `0.4.0`。该过程只读取历史、文件元数据和受控版本输出，不保存新记录、不启动包管理器写动作，也不提供公开继续命令。
 
 I16 在 macOS 上增加 [`Plan 0.3.0`](./schemas/plan/v0.3.0.json) 的单动作 R3 默认版本切换。目标必须已由 NVM 安装，不需要联网。先只读审查原 alias、原解析版本和精确目标：
 

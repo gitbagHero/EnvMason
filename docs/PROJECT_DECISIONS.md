@@ -292,6 +292,15 @@
 - 决定：现有通用 Executor 只接受 Plan `0.2.0`/`0.3.0`，必须在注册表解析、Operation Record 写入和进程启动前拒绝 Plan `0.4.0`。继续 Plan 生成只做确定性内存计算，不调用 Action Build、写历史或执行系统修改。
 - 非范围：本增量不增加公开 CLI，不确认或执行继续 Plan，不升级 Operation Record，不支持 R3/R4、混合风险 DAG、自动回滚、恢复 Plan、完整“安装 Node → 切换默认 → 更新工具”流程或通用跨管理器事务。
 
+### D-032：I18-E Node tools 继续 Plan 端到端只读准备
+
+- 状态：Accepted（维护者于 2026-07-30 确认三小时时间盒方案并指示开始）
+- 决定：新增 Node tools 内部 `PrepareContinuation` 服务，从确定的 Operation ID 只读加载 Operation Record `0.3.0`，严格验证来源 confirmed Plan 为只含 npm、Corepack、pnpm `update_version` 动作的 R1/R2 Plan `0.2.0`。Node 版本、精确工具目标和 provider 必须从来源 Plan 一致提取，调用方不得用新参数扩大或替换目标。
+- 决定：服务必须在一次当前环境扫描上完成目标 NVM Node 检查、工具归属检查、必要的 Corepack-managed pnpm 只读版本探测、I18-C 检查点复核和剩余 Plan 重新准备。失败步骤即使当前状态已经等于目标，仍属于剩余动作；新 Plan 只更新其 current-state 前置事实，不能追认历史完成。
+- 决定：重新准备的 Plan `0.2.0` 只包含资格判定的剩余动作，创建时间取本次服务时间且必须晚于来源终态；随后由 I18-D 核心生成不可执行 Plan `0.4.0`。实现可以抽取 I17 `Prepare` 的单次扫描纯辅助逻辑，但相同输入的既有 I17 Plan 和执行语义不得变化。
+- 决定：本服务只允许历史读取、文件元数据检查和受控 `--version` 类探测；不得调用 Action Build、执行包管理器写动作、保存 Operation Record 或创建新的历史文件。漂移、旧/活动/完成/篡改记录、非 Node tools 来源或无剩余动作均阻断。
+- 非范围：本增量不增加 CLI，不确认或执行 Plan `0.4.0`，不升级 Operation Record，不支持 R3/R4、混合风险 DAG、恢复 Plan、自动回滚或完整 Node 工作流。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -669,7 +678,7 @@
 - 副作用与隐私检查：资格判定不调用 Action Build、不写 Operation Record、不启动写动作；动作级证据不包含原始私有路径或复核器原始错误。测试确认来源 Plan、记录和 Snapshot 不与回调或结果共享可变状态。
 - 失败矩阵检查：npm → Corepack → pnpm 的每一步分别覆盖进程失败和验证失败；复用集合始终只含失败点之前已验证并新鲜复核的动作，当前及后续动作全部留在待执行集合。另覆盖四种终态、零复用、依赖未复核、上下文取消和 Corepack-managed pnpm 精确只读探测。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` 核心测试及 Linux/Windows amd64 目标构建均通过。
-- 远程检查：N/A；本地提交 `8f62198` 尚未获得推送授权。
+- 远程检查：提交 `8f62198` 已进入 `main`；包含该提交及后续 I18-D 的 [main CI #30519955250](https://github.com/gitbagHero/EnvMason/actions/runs/30519955250) 在 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务中全部成功。
 - N/A：本增量不生成、确认或执行继续/恢复 Plan，不新增 CLI 或 Schema，不支持 R2/R3 混合 DAG，不自动回滚。
 - 结论：I18-C 已完成并提交；I18-D 只能在其 Eligible 结论上生成不可执行的新继续 Plan，不能直接复用旧确认或开放执行。
 
@@ -678,12 +687,29 @@
 - 增量：I18-D 继续 Plan 来源绑定与执行隔离
 - 开始、完成与本地检查日期：2026-07-30
 - 客观检查状态：Passed
-- 维护者最终验收：Pending
+- 维护者最终验收：Accepted（维护者确认开始并继续，随后明确授权提交和推送）
 - Schema 与不可变性检查：新增 Plan `0.4.0`，固定 `executable=false`；来源 Operation/Plan、重新准备的 Plan、来源动作顺序、记录/观察检查点 digest 和 checkpoint-satisfied dependency 全部进入内容派生 Plan ID。`0.3.0`、`0.2.0`、`0.1.0` 的嵌入 Schema、严格解码和语义校验继续通过。
 - 新鲜准备与动作分区检查：只接受来源终态之后重新生成的 Plan `0.2.0`，且必须恰好包含 I18-C 判定的待执行动作。动作身份、adapter、精确目标和风险必须与来源一致；待执行依赖保持，指向复用检查点的依赖从 DAG 中移除并写入来源绑定。首个动作失败的零检查点场景生成带来源的全量重试草案，不追认完成动作。
 - 篡改与隔离检查：来源/评估身份不匹配、记录证据 digest 被替换、准备时间不晚于终态、遗漏待执行动作、目标变化、动作重叠、分区遗漏、未知依赖和顺序变化均被拒绝。输入记录、Plan、动作、环境和证据切片与结果不共享可变状态。
 - 执行边界检查：Plan `0.4.0` 送入现有 Executor 时在注册表解析、Operation Record 写入和进程启动前返回 `plan_invalid`；生成过程不解析注册表、不调用 Action Build、不写历史、不运行进程。JSON Schema 和模型均没有 command、args、Shell 或执行规范字段。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` Plan/Execution/Schema 核心测试以及 Linux/Windows amd64 目标构建均通过。
-- 远程检查：N/A；本地候选尚未提交或推送。
+- 远程检查：提交 `5321ad1` 已进入 `main`；[main CI #30519955250](https://github.com/gitbagHero/EnvMason/actions/runs/30519955250) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务全部成功。
 - N/A：本增量不新增 CLI，不确认或执行继续/恢复 Plan，不升级 Operation Record，不支持 R3/R4 或混合风险 DAG，不自动回滚，也不完成整个 I18。
-- 结论：I18-D 本地候选已通过客观验收，等待维护者确认后提交；真正的继续执行必须作为后续独立增量重新冻结确认、过期、执行前复核和新 Operation Record 语义。
+- 结论：I18-D 已完成、提交并通过远程门禁；真正的继续执行必须作为后续独立增量重新冻结确认、过期、执行前复核和新 Operation Record 语义。
+
+## I18-E 验收记录
+
+- 增量：I18-E Node tools 继续 Plan 端到端只读准备
+- 开始、完成与本地检查日期：2026-07-30
+- 客观检查状态：Passed
+- 维护者最终验收：Accepted（维护者确认本地候选并明确授权提交）
+- 用户价值与入口检查：新增内部 `PrepareContinuation` 服务，调用方只提供 Operation ID，即可从一条真实 Node tools 失败记录生成不可执行的审查态 Plan `0.4.0`。本增量没有新增 CLI、确认入口或执行入口。
+- 来源约束检查：只读加载 Operation Record `0.3.0`，并在环境扫描前拒绝旧 Schema、活动或完成记录、非 Node tools Plan、无剩余动作和非法 Operation ID。Node 版本、npm/Corepack/pnpm 精确目标及 provider 只从 confirmed Plan 提取；动作身份、风险、目标、provider、控制摘要、安全检查和验证范围必须符合 Node tools 白名单。
+- 单次扫描与失败位置检查：npm、Corepack、pnpm 首、中、末三个失败位置均只执行一次新鲜 Inventory 扫描，分别产生全部、后两项和最后一项剩余动作；复用检查点及其满足的依赖准确进入 Plan `0.4.0`。失败动作即使当前版本已等于目标仍保留，只更新新 Plan 的 current-state 事实。
+- 漂移与失败路径检查：default alias 等检查点事实漂移时以稳定 `checkpoint_drifted` 原因阻断；不向错误或 Plan 泄漏原始 NVM 路径。来源元数据替换、浮动目标、provider 替换、安全检查缺失或作用域变化均被拒绝。
+- 副作用检查：准备过程只读取历史、文件元数据和受控 `--version` 输出；测试逐字节比较准备前后的历史目录，并断言没有 Action Build、包管理器写动作、Operation Record 保存或新历史文件。
+- 兼容性检查：I17 `Prepare` 只抽取单次扫描后的共享检查与 Plan 构建辅助逻辑，既有公开 CLI、Plan `0.2.0` 内容和执行路径不变；全量回归通过。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`GOPROXY=off go test -count=1 ./internal/nodetools ./internal/execution ./internal/plan` 以及 Linux/Windows amd64 目标构建均通过。
+- 远程检查：N/A；当前本地候选尚未提交或推送。
+- N/A：本增量不确认或执行 Plan `0.4.0`，不升级 Operation Record，不支持 R3/R4、混合风险 DAG、恢复 Plan、自动回滚或完整 Node 工作流。
+- 结论：I18-E 已通过客观验收并获得提交授权；后续仍需独立冻结继续 Plan 的确认、执行前复核、新 Operation Record 和安全执行语义。
