@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gitbagHero/EnvMason/internal/inventory"
 	"github.com/gitbagHero/EnvMason/internal/plan"
 )
 
@@ -169,6 +170,74 @@ func TestExecutorVerificationFailureIsNotCompleted(t *testing.T) {
 	}
 }
 
+func TestExecutorStopsDependentActionsAfterEveryDAGFailure(t *testing.T) {
+	t.Parallel()
+	actionIDs := []string{"update-npm", "update-corepack", "update-pnpm"}
+	for _, phase := range []string{"process", "verification"} {
+		for failureIndex, actionID := range actionIDs {
+			phase := phase
+			failureIndex := failureIndex
+			actionID := actionID
+			t.Run(phase+"-"+actionID, func(t *testing.T) {
+				t.Parallel()
+				processFailure := ""
+				verificationFailure := ""
+				expectedCode := CodeExitNonZero
+				if phase == "process" {
+					processFailure = actionID
+				} else {
+					verificationFailure = actionID
+					expectedCode = CodeVerificationFailed
+				}
+				executor, request, store, runner := dagTestHarness(t, processFailure, verificationFailure)
+				record, err := executor.Execute(t.Context(), request)
+				assertExecutionCode(t, err, expectedCode)
+				if record.State != StateFailed || len(record.Steps) != len(actionIDs) {
+					t.Fatalf("record state/steps = %s/%d", record.State, len(record.Steps))
+				}
+				if len(runner.calls) != failureIndex+1 {
+					t.Fatalf("runner calls = %#v", runner.calls)
+				}
+				for index, step := range record.Steps {
+					if step.ActionID != actionIDs[index] {
+						t.Fatalf("step order = %#v", record.Steps)
+					}
+					switch {
+					case index < failureIndex:
+						if step.State != StateCompleted || step.Verification.State != CheckPassed {
+							t.Fatalf("completed prerequisite %d = %#v", index, step)
+						}
+					case index == failureIndex:
+						expectedVerification := CheckNotRun
+						if phase == "verification" {
+							expectedVerification = CheckFailed
+						}
+						if step.State != StateFailed || step.Verification.State != expectedVerification {
+							t.Fatalf("failed action %d = %#v", index, step)
+						}
+					default:
+						if step.State != StatePending || step.StartedAt != nil || step.Invocation != nil ||
+							step.Precondition.State != CheckPending || step.Verification.State != CheckNotRun {
+							t.Fatalf("dependent action %d was started: %#v", index, step)
+						}
+					}
+				}
+				for index, called := range runner.calls {
+					if called != actionIDs[index] {
+						t.Fatalf("runner calls = %#v", runner.calls)
+					}
+				}
+				if len(store.records) == 0 || store.records[len(store.records)-1].State != StateFailed {
+					t.Fatal("terminal failure was not persisted")
+				}
+				if _, err := MarshalRecord(record); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
 func TestExecutorRedactsSecretsAndBoundsAllPersistedOutput(t *testing.T) {
 	t.Parallel()
 	const token = "mock-token-super-secret"
@@ -292,6 +361,79 @@ func TestExecutorRecordsDeterministicBeforeAfterDiff(t *testing.T) {
 	}
 }
 
+func dagTestHarness(t *testing.T, processFailure, verificationFailure string) (Executor, Request, *memoryStore, *actionRunner) {
+	t.Helper()
+	digest := "sha256:" + strings.Repeat("a", 64)
+	value, err := plan.BuildNodeTools(plan.NodeToolsInput{
+		CreatedAt:          testBaseTime,
+		NodeVersion:        "24.12.0",
+		NVMScriptDigest:    digest,
+		DefaultAliasDigest: "sha256:" + strings.Repeat("b", 64),
+		Inventory: inventory.Inventory{
+			SchemaVersion: inventory.SchemaVersion,
+			GeneratedAt:   testBaseTime.Add(-time.Minute),
+			System: inventory.System{
+				OS: inventory.OSMacOS, OSVersion: "26.0", Architecture: inventory.ArchitectureARM64,
+			},
+			Tools: []inventory.Tool{{
+				ID: "runtime.node", DisplayName: "Node.js", Category: inventory.CategoryRuntime,
+				Installations: []inventory.Installation{{
+					ID: "node-nvm-target", Version: "v24.12.0", Path: "$HOME/.nvm/versions/node/v24.12.0/bin/node",
+					Manager: "nvm", Architecture: inventory.ArchitectureARM64,
+					ActiveState: inventory.ActiveStateActive, DefaultState: inventory.DefaultStateDefault,
+				}},
+			}},
+		},
+		Targets: []plan.NodeToolTarget{
+			{ToolID: plan.NodeToolNPM, CurrentVersion: "11.6.2", TargetVersion: "12.0.1", Provider: plan.NodeToolProviderNPM, ControlDigest: digest},
+			{ToolID: plan.NodeToolCorepack, CurrentVersion: "0.34.5", TargetVersion: "0.35.0", Provider: plan.NodeToolProviderNPM, ControlDigest: digest},
+			{ToolID: plan.NodeToolPNPM, CurrentVersion: "10.0.0", TargetVersion: "11.1.0", Provider: plan.NodeToolProviderCorepack, ControlDigest: digest},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executableRoot := t.TempDir()
+	definitions := make([]Definition, 0, len(value.Actions))
+	for _, action := range value.Actions {
+		definitions = append(definitions, Definition{
+			Key:         ActionKey{ToolID: action.ToolID, Operation: action.Operation, Adapter: action.Adapter},
+			MinimumRisk: plan.RiskR2,
+			Build: func(candidate plan.Action) (CommandSpec, error) {
+				return CommandSpec{
+					Executable: filepath.Join(executableRoot, candidate.ID),
+					Args:       []string{candidate.ID},
+					Timeout:    time.Second,
+				}, nil
+			},
+			Verify: func(_ context.Context, candidate plan.Action, _ ProcessResult) error {
+				if candidate.ID == verificationFailure {
+					return errors.New("injected verification failure")
+				}
+				return nil
+			},
+		})
+	}
+	registry, err := NewRegistry(definitions...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &memoryStore{}
+	runner := &actionRunner{failAction: processFailure}
+	executor := Executor{
+		Registry: registry, Runner: runner, Store: store,
+		Now:            func() time.Time { return testBaseTime.Add(time.Minute) },
+		NewOperationID: func() (string, error) { return "op-00000000000000000000000000000002", nil },
+	}
+	request := Request{
+		Plan: value,
+		Confirmation: ConfirmationReceipt{
+			Scope: "plan", ConfirmedPlanID: value.ID, ConfirmedAt: testBaseTime.Add(30 * time.Second),
+		},
+	}
+	return executor, request, store, runner
+}
+
 func testHarness(t *testing.T, suppliedRunner *fakeRunner) (Executor, Request, *memoryStore, *fakeRunner) {
 	t.Helper()
 	value, err := plan.BuildSelfTest(plan.SelfTestInput{CreatedAt: testBaseTime, OS: "darwin", OSVersion: "26.0", Architecture: "arm64"})
@@ -337,6 +479,25 @@ type fakeRunner struct {
 func (runner *fakeRunner) Run(context.Context, CommandSpec) ProcessResult {
 	runner.calls++
 	return runner.result
+}
+
+type actionRunner struct {
+	failAction string
+	calls      []string
+}
+
+func (runner *actionRunner) Run(_ context.Context, spec CommandSpec) ProcessResult {
+	actionID := spec.Args[0]
+	runner.calls = append(runner.calls, actionID)
+	exitCode := 0
+	if actionID == runner.failAction {
+		exitCode = 7
+		return ProcessResult{
+			ExitCode: &exitCode,
+			Failure:  executionError(CodeExitNonZero, "injected process failure"),
+		}
+	}
+	return ProcessResult{ExitCode: &exitCode}
 }
 
 type memoryStore struct {

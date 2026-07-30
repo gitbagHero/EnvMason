@@ -258,6 +258,14 @@
 - 决定：Corepack 的 Known Good Release 按其官方契约存放在用户级 `COREPACK_HOME`，不是 NVM 版本私有缓存。I17 的 Node 作用域保证是“命令、代理所有权、bin 目录和验证都绑定目标 Node”，不承诺 Corepack 缓存在不同 NVM Node 之间隔离；Plan 必须显式标记 `corepack` provider，且动作不得改写其他 Node 的 `bin` 目录。
 - 决定：I17 不安装 NVM/Node，不修改 default alias 或当前 Shell，不迁移任意全局 npm 包，不修改项目 `package.json`/lockfile，不读取用户包管理器配置或认证，不支持 Homebrew/standalone/未知 provider，不清理缓存或失败残留，不自动回滚，不提权。
 
+### D-028：I18 分段交付与失败隔离基线
+
+- 状态：Accepted（维护者于 2026-07-30 接受一小时时间盒方案，授权在 I17 远程门禁通过后继续开发）
+- 决定：I18 先交付最小 I18-A，不在一个时间盒中同时引入混合风险 Plan、跨运行检查点、继续 Plan 和恢复 Plan。I18-A 的用户价值是证明多动作流程中任一步失败都不会启动其后续依赖，且动作进程成功但验证失败时不能产生 Completed。
+- 决定：I18-A 复用 Plan `0.2.0`、Operation Record `0.2.0` 和现有确定性执行器，以 npm → Corepack → pnpm 三动作 R2 DAG 建立六场景失败注入矩阵：每一步分别注入进程失败和验证失败。每个场景必须同时证明上游已验证完成、当前动作失败、下游保持 Pending 且没有启动痕迹、终态失败已持久化并通过 Operation Record 语义校验。
+- 决定：若现有执行器已满足上述契约，I18-A 只增加回归证据，不为制造代码改动而重写核心。新增公开 Schema、CLI、写适配器或确认语义均不属于本增量。
+- 非范围：从中断记录生成继续/恢复 Plan、跨运行检查点重新验证、环境关键状态漂移策略、R2/R3 混合 DAG 的逐项确认、“安装 Node → 切换默认 → 更新工具”完整流程和通用跨管理器事务。以上仍需在后续 I18 增量中分别冻结契约。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -581,8 +589,8 @@
 ## I17 验收记录
 
 - 增量：I17 Node 附属工具更新
-- 开始与本地检查日期：2026-07-28
-- 客观检查状态：本地实现、fixture、全量回归与构建门禁通过
+- 开始与本地检查日期：2026-07-28；远程门禁完成日期：2026-07-30
+- 客观检查状态：本地实现、fixture、全量回归、构建与远程 CI 门禁通过
 - 维护者最终验收：Accepted（维护者于 2026-07-28 确认本地候选没有问题并授权提交、推送）
 - 用户价值与范围检查：新增 `envmason update node-tools`，在一个已安装 NVM Node 下分别选择 npm、Corepack、pnpm 精确目标；省略任一参数即可排除。范围外保持为 NVM/Node 安装、default/current Shell 修改、全局包迁移、Yarn、清理、自动回滚、I18 继续/恢复 Plan 和任意命令。
 - Plan 与确认检查：复用 Plan `0.2.0` 和 Operation Record `0.2.0`，所有 Action 为 R2、声明式身份和依赖，不新增公开 Schema。dry-run 不确认、不执行、不创建操作记录；真实入口只接受交互式 `apply <完整 Plan ID>`，没有 `--yes`。浮动版本、版本范围、降级、缺少选择和未知 provider 在写入前拒绝。
@@ -593,5 +601,6 @@
 - 本机只读检查：宿主 NVM Node v26.5.0 的 dry-run 正确识别 npm v12.0.1 和 Corepack-managed pnpm v11.13.0；相同 npm 版本生成幂等 R2 Plan，较低 pnpm 目标在准备阶段拒绝，较高精确 pnpm 目标显示 `corepack` provider。所有 dry-run 均未创建 Operation Record，也未执行更新。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、gofmt、`git diff --check`、`GOPROXY=off` I17 核心测试及 Linux/Windows amd64 目标构建均通过。
 - 稳定性检查：同时并行叠加普通全量与 race 全量时，普通套件中的既有 I15 安装 fixture 一次验证失败，而同轮 race 通过；该 I15 目标测试随后独立连续 10 次通过，顺序运行的普通全量也通过，未复现 I17 回归。
-- 限制与后续门禁：未对宿主执行真实 npm/Corepack/pnpm 更新；联网下载、远端包不存在、真实缓存/磁盘失败和真实进程中断仍应优先在可恢复环境验证。该限制不开放宿主写入或扩大 I17 范围；远程 CI 结果仍是进入 I18 前的独立门禁。
-- 结论：I17 已由维护者确认验收并获准提交、推送；本次仍停在 I17，不进入 I18。
+- 远程检查：首次 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/30338105851) 的 Ubuntu 和 macOS 任务通过，Windows 因 POSIX fixture 执行位不适用而失败；修复仅在测试层跳过依赖 Unix 权限与符号链接的 fixture，并保留 Windows 平台在环境扫描前拒绝写执行的独立测试，没有放宽生产安全校验。修复后的 [main CI](https://github.com/gitbagHero/EnvMason/actions/runs/30509363380) 在 Ubuntu、macOS、Windows × Go 1.25/1.26 六个任务中全部成功。
+- 限制：未对宿主执行真实 npm/Corepack/pnpm 更新；联网下载、远端包不存在、真实缓存/磁盘失败和真实进程中断仍应优先在可恢复环境验证。该限制不开放宿主写入或扩大 I17 范围。
+- 结论：I17 已由维护者确认验收，远程 CI 门禁已通过并进入 I18-A。
