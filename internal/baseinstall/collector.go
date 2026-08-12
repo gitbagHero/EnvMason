@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -181,7 +181,7 @@ func CollectTransactionFacts(input TransactionCollectionInput) (TransactionFacts
 		installation.Version != input.Plan.Environment.ActiveVersion ||
 		installation.Manager != input.Plan.Environment.ActiveManager ||
 		installation.Architecture != input.Lock.Target.Architecture ||
-		!filepath.IsAbs(input.ExecutablePath) || input.ExecutablePath != installation.Path {
+		!path.IsAbs(input.ExecutablePath) || input.ExecutablePath != installation.Path {
 		return TransactionFacts{}, errors.New("collect Homebrew transaction: Homebrew identity, architecture or executable path changed after Plan creation")
 	}
 	if len(input.ExecutableData) == 0 || len(input.ExecutableData) > maxExecutableBytes {

@@ -85,6 +85,16 @@ func TestCollectTransactionFactsBuildsExactReadOnlyReviewInputs(t *testing.T) {
 	}
 }
 
+func TestCollectTransactionFactsUsesTargetMacOSPathSemantics(t *testing.T) {
+	input := validCollectionInput(t)
+	input.ExecutablePath = `C:\opt\homebrew\bin\brew.exe`
+	input.Inventory.Tools[0].Installations[0].Path = input.ExecutablePath
+	if _, err := CollectTransactionFacts(input); err == nil ||
+		!strings.Contains(err.Error(), "executable path") {
+		t.Fatalf("Windows host path was accepted for macOS target: %v", err)
+	}
+}
+
 func TestCollectTransactionFactsIsDeterministicAcrossCatalogAndArtifactOrder(t *testing.T) {
 	firstInput := validCollectionInput(t)
 	first, err := CollectTransactionFacts(firstInput)
