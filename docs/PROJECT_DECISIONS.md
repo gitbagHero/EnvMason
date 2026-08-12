@@ -607,6 +607,16 @@
 - 验收：Git/CMake 单项与双项、共享依赖去重、乱序确定性、输入不变、Plan/Lock/来源/Homebrew/配置漂移、Action 漏项/额外项、根公式或精确版本不符、重复依赖冲突、未知大小和总量溢出均覆盖；结果篡改后严格验证失败；全量、race、vet、build、离线及跨平台构建通过。
 - 非范围：I21-B 不执行或注册 `brew install`，不自行调用/更新 Homebrew，不解释 shell 或 Homebrew 环境文件，不新增公开 Schema/CLI/确认，不写 Operation/Lock，不 bootstrap、不卸载，也不声称完成 I21。实际只读采集器与固定写适配器分别在后续最小增量开放。
 
+### D-059：I21-C Homebrew 事务事实采集边界
+
+- 状态：Accepted（依据阶段二合并完成及维护者进入阶段三的明确指令；不包含提交或推送授权）
+- 用户价值：I21-B 不再依赖调用方手工拼接 Homebrew Baseline 和依赖预览；在任何写适配器开放前，确定性核心可从一组可审查的同刻快照生成完整事务事实，并对配置、catalog、当前安装和 bottle 成本漂移提前失败。
+- 输入与副作用：核心只接收调用方显式提供的当前 Inventory、brew 可执行文件路径与内容、进程环境、system/prefix/user 三层 `brew.env` 内容、完整官方 catalog JSON、目标 bottle tag 以及带 catalog SHA-256 的下载大小事实。它不自行发现或读取路径，不启动 `brew`/Shell，不访问网络，不写历史、Plan、Lock 或系统状态。
+- 配置策略：只把 `HOMEBREW_*`、大小写 proxy 和 `SUDO_ASKPASS` 视为影响面；环境文件严格按 `KEY=VALUE` 数据解析并依次覆盖 environment → system → prefix → user。任何未批准键或非固定安全值停止；当前白名单要求 `HOMEBREW_NO_AUTO_UPDATE=1`、`HOMEBREW_NO_INSTALL_UPGRADE=1`、`HOMEBREW_NO_INSTALL_CLEANUP=1`、`HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1`、`HOMEBREW_NO_ANALYTICS=1`、`HOMEBREW_NO_ASK=1`、`HOMEBREW_NO_ENV_HINTS=1`。不保存或回显配置值。
+- catalog 与闭包：catalog 原始字节 digest 必须等于 Lock 的唯一 `homebrew-core` package catalog source，并固定官方 URI。完整 catalog 只建立有界、名称唯一的索引；严格的 `homebrew/core`、版本、revision、依赖和 bottle 校验只作用于 Git/CMake 的可达闭包，避免无关 formula 的合法版本格式阻断事务。精确版本包含 formula revision，依赖使用目标 bottle tag 的 variation 覆盖和 required+recommended 传递闭包，拒绝缺项、重复、循环、disabled 和超过 256 个 formula 的闭包。当前 Inventory 中同 manager/目标架构的精确版本才标记 satisfied；目标架构存在其他版本时作为冲突停止，完全缺失时才要求与 catalog bottle SHA-256、版本和目标 tag 一致的正下载大小事实；其他架构安装不计为满足或冲突，多余 artifact 同样拒绝。
+- 隐私与边界：输出只含 I21-B 的 `TransactionBaseline` 与 `ActionPreview`，不含文件路径、环境键值、catalog URI、bottle URL、命令、参数、确认或凭据。I21-C 不新增公开 Schema/CLI，不注册或运行 `brew install`，不完成 I21；固定写适配器和执行后 Lock/diff 继续后移。
+- 验收：双 formula、共享/已满足依赖、catalog/Artifact 乱序、target variation、formula revision、输入不可变、Plan/Lock/Inventory/Homebrew/配置/catalog/bottle 漂移、恶意/超大配置、缺失/多余/零大小 artifact、依赖缺失/循环/过大、输出无敏感信息及 I21-B 端到端接受均覆盖；全量、race、vet、build、离线和跨平台构建必须通过。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -1367,3 +1377,19 @@
 - 远程检查：N/A；当前修改尚未获得提交或推送授权。
 - N/A：本增量不执行/注册或自行调用 `brew install`，不读取/解释 Homebrew 环境文件，不更新 Homebrew，不新增公开 Schema/CLI/确认，不写 Operation/Lock，不 bootstrap、不卸载，也不完成 I21。
 - 结论：I21-B 客观验收完成。按维护者新的一小时时间盒要求停在已通过门禁的边界；下一安全增量是 I21-C 只读采集器，负责从固定 Homebrew JSON/配置文件白名单生成本 Review 所需 Baseline/Preview，写适配器继续保持未注册。
+
+## I21-C 验收记录
+
+- 增量：I21-C Homebrew 事务事实只读采集
+- 开始、完成与本地检查日期：2026-08-12
+- 客观检查状态：Passed
+- 维护者验收：Accepted（维护者在客观门禁通过后明确授权审查与提交；不包含推送授权）
+- 采集与绑定检查：新增 `CollectTransactionFacts` 纯函数，只从显式快照生成 I21-B 的 Baseline/ActionPreview。Plan 必须仍有效；Lock、Inventory、唯一 active Homebrew 身份/版本/目标架构、brew 路径、观察时间、目标 macOS/bottle tag、官方 catalog 原始 digest 和 source 均严格绑定；其他架构的 formula 不计为已满足。输入及嵌套数据保持不变。
+- 配置检查：解析环境及 system/prefix/user 三层固定 `brew.env` 内容，不执行 Shell 或扩展；未批准 Homebrew/proxy/SUDO 配置、错误安全值、重复/非法行、NUL/CR、超大文件/值/键数均停止。结果仅保留规范化配置摘要与 safe 事实，不回显值。
+- 事务闭包检查：catalog 允许前向新增 JSON 字段，完整文档只要求有界、名称有效且唯一；`homebrew/core` 核心字段与严格版本规则只约束 Git/CMake 的可达闭包，因此无关 formula 的合法非数字前缀版本不会误阻断。按目标 variation 覆盖 required/recommended 依赖，formula revision 进入精确版本。当前 Inventory 的同 manager/目标架构精确版本才标记 satisfied；目标架构已有其他版本则停止，完全缺失的 root/依赖必须具有目标 bottle tag、catalog SHA-256 和已知非零大小。依赖缺失、循环、disabled、过大闭包、root 已安装/版本漂移、依赖版本冲突、artifact 缺失/多余/重复/零大小/digest 不符全部拒绝。
+- 隐私与执行隔离：输出序列化断言不含 brew 路径、官方 catalog URI、配置键值、镜像/凭据样本；实现不导入或调用 os/exec/net/http，不含 Registry、CommandSpec、文件写入或进程入口。CLI 与既有执行注册表均未修改，Homebrew Action 继续为 unregistered。
+- 提交前审查：以 2026-08-12 的官方 formula catalog 抽查发现 8540 个 formula 中有 6 个无关 formula 使用合法的非数字前缀版本；据此将严格版本规则收窄到 Git/CMake 可达闭包并增加双向回归测试。审查同时补上 active Homebrew 目标架构绑定、其他架构 formula 不计为满足、目标架构旧版依赖冲突停止，以及不可显示配置键名不进入错误信息；未发现遗留阻断项。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off go test -count=1 ./internal/baseinstall` 以及 Linux/Windows amd64 目标构建均通过。`internal/baseinstall` 语句覆盖率为 86.8%，`git diff --check` 通过。
+- 远程检查：首次分支 CI #31579880066 的 Ubuntu/macOS × Go 1.25/1.26 四项通过，Windows × Go 1.25/1.26 两项发现纯核心错误使用宿主 `filepath.IsAbs`，使 Windows 将目标 macOS 路径误判为相对路径。修复改用固定 POSIX/macOS 路径语义并增加跨平台回归测试；修复后的分支 CI #31580456682 在 Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部通过。
+- N/A：本增量不提供公开 CLI/Schema，不自行发现/读取路径，不调用 Homebrew/Shell/网络，不执行/注册 `brew install`，不写 Operation/Plan/Lock，不 bootstrap、不卸载、不生成执行后 Lock/diff，也不完成 I21。
+- 结论：I21-C 本地与远端客观验收全部完成，阶段三完成并停在 PR/合并授权前。合并后才能冻结并进入 I21-D 固定 Homebrew 写适配器、重新采集/确认、失败记录和恢复边界；不得仅因事务事实已齐全就开放执行。
