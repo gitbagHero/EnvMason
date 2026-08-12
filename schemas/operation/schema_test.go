@@ -11,7 +11,7 @@ func TestCurrentSchemaIdentityAndCopy(t *testing.T) {
 	var document struct {
 		ID string `json:"$id"`
 	}
-	if err := json.Unmarshal(Current(), &document); err != nil || document.ID != ID || Version != "0.3.0" {
+	if err := json.Unmarshal(Current(), &document); err != nil || document.ID != ID || Version != "0.4.0" {
 		t.Fatalf("schema identity = %#v, %v", document, err)
 	}
 	first := Current()
@@ -25,6 +25,9 @@ func TestCurrentSchemaIdentityAndCopy(t *testing.T) {
 	}
 	if data, id, ok := ByVersion(PreviousVersion); !ok || id != PreviousID || len(data) == 0 {
 		t.Fatal("previous operation schema is unavailable")
+	}
+	if data, id, ok := ByVersion(OlderVersion); !ok || id != OlderID || len(data) == 0 {
+		t.Fatal("older operation schema is unavailable")
 	}
 	if data, id, ok := ByVersion(LegacyVersion); !ok || id != LegacyID || len(data) == 0 {
 		t.Fatal("legacy operation schema is unavailable")

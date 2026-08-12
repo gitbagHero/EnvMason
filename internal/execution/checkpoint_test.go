@@ -174,7 +174,7 @@ func TestAssessContinuationRejectsUntrustedSourceStatesAndDependencies(t *testin
 
 	t.Run("legacy", func(t *testing.T) {
 		t.Parallel()
-		for _, version := range []string{PreviousRecordSchemaVersion, LegacyRecordSchemaVersion} {
+		for _, version := range []string{OlderRecordSchemaVersion, LegacyRecordSchemaVersion} {
 			source, registry, _, _ := checkpointSource(t, "update-npm", "", "", "", false)
 			source.SchemaVersion = version
 			source.ConfirmedPlan = nil

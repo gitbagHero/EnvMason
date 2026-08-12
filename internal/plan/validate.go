@@ -16,7 +16,9 @@ var operationIDPattern = regexp.MustCompile(`^op-[a-f0-9]{32}$`)
 
 func Validate(value Plan) error {
 	if value.SchemaVersion != SchemaVersion && value.SchemaVersion != ExecutableSchemaVersion &&
-		value.SchemaVersion != HighRiskExecutableSchemaVersion && value.SchemaVersion != ContinuationSchemaVersion {
+		value.SchemaVersion != HighRiskExecutableSchemaVersion &&
+		value.SchemaVersion != ContinuationSchemaVersion &&
+		value.SchemaVersion != ExecutableContinuationSchemaVersion {
 		return fmt.Errorf("validate plan: unsupported schema_version %q", value.SchemaVersion)
 	}
 	if !digestPattern.MatchString(value.ID) || !digestPattern.MatchString(value.EnvironmentDigest) || !digestPattern.MatchString(value.PolicyDigest) {
@@ -37,11 +39,18 @@ func Validate(value Plan) error {
 	if value.SchemaVersion == ContinuationSchemaVersion && value.Executable {
 		return errors.New("validate plan: Plan 0.4.0 must be a non-executable continuation draft")
 	}
-	if value.SchemaVersion != ContinuationSchemaVersion && value.Continuation != nil {
-		return errors.New("validate plan: continuation provenance requires Plan 0.4.0")
+	if value.SchemaVersion == ExecutableContinuationSchemaVersion && !value.Executable {
+		return errors.New("validate plan: Plan 0.5.0 must be an executable continuation Plan")
 	}
-	if value.SchemaVersion == ContinuationSchemaVersion && value.Continuation == nil {
-		return errors.New("validate plan: Plan 0.4.0 requires continuation provenance")
+	if value.SchemaVersion != ContinuationSchemaVersion &&
+		value.SchemaVersion != ExecutableContinuationSchemaVersion &&
+		value.Continuation != nil {
+		return errors.New("validate plan: continuation provenance requires Plan 0.4.0 or 0.5.0")
+	}
+	if (value.SchemaVersion == ContinuationSchemaVersion ||
+		value.SchemaVersion == ExecutableContinuationSchemaVersion) &&
+		value.Continuation == nil {
+		return fmt.Errorf("validate plan: Plan %s requires continuation provenance", value.SchemaVersion)
 	}
 	if strings.TrimSpace(value.Summary) == "" || len(value.Actions) == 0 {
 		return errors.New("validate plan: summary and actions are required")
@@ -151,7 +160,8 @@ func validateAction(schemaVersion string, action Action) error {
 	if schemaVersion == SchemaVersion && riskRank(action.Risk) < riskRank(RiskR2) {
 		return errors.New("install_version risk cannot be lower than R2")
 	}
-	if (schemaVersion == ExecutableSchemaVersion || schemaVersion == ContinuationSchemaVersion) &&
+	if (schemaVersion == ExecutableSchemaVersion || schemaVersion == ContinuationSchemaVersion ||
+		schemaVersion == ExecutableContinuationSchemaVersion) &&
 		action.Risk != RiskR1 && action.Risk != RiskR2 {
 		return fmt.Errorf("Plan %s only permits R1 and R2 actions", schemaVersion)
 	}
@@ -243,7 +253,8 @@ func riskRank(value Risk) int {
 
 func validCheckKind(schemaVersion, value string) bool {
 	if schemaVersion == ExecutableSchemaVersion || schemaVersion == HighRiskExecutableSchemaVersion ||
-		schemaVersion == ContinuationSchemaVersion {
+		schemaVersion == ContinuationSchemaVersion ||
+		schemaVersion == ExecutableContinuationSchemaVersion {
 		return identifierPattern.MatchString(value)
 	}
 	switch value {

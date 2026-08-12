@@ -62,3 +62,40 @@ func BuildContinuationDraft(input ContinuationDraftInput) (Plan, error) {
 	}
 	return value, nil
 }
+
+// BuildExecutableContinuation deterministically promotes one valid review-only
+// continuation draft into the final executable Plan that a future caller can
+// present for confirmation. This pure transformation never confirms or
+// executes the Plan and does not share mutable state with its input.
+func BuildExecutableContinuation(draft Plan) (Plan, error) {
+	if err := Validate(draft); err != nil {
+		return Plan{}, errors.New("build executable continuation Plan: draft is invalid")
+	}
+	if draft.SchemaVersion != ContinuationSchemaVersion ||
+		draft.Executable || draft.Continuation == nil {
+		return Plan{}, errors.New("build executable continuation Plan: review-only Plan 0.4.0 is required")
+	}
+	data, err := Marshal(draft)
+	if err != nil {
+		return Plan{}, errors.New("build executable continuation Plan: draft could not be copied")
+	}
+	value, err := Decode(data)
+	if err != nil {
+		return Plan{}, errors.New("build executable continuation Plan: draft could not be copied")
+	}
+	value.SchemaVersion = ExecutableContinuationSchemaVersion
+	value.ID = ""
+	value.Executable = true
+	value.Summary = fmt.Sprintf(
+		"Continue %d remaining action(s) from a terminal operation after revalidating %d checkpoint(s).",
+		len(value.Actions), len(value.Continuation.ReusableCheckpoints),
+	)
+	value.ID, err = planID(value)
+	if err != nil {
+		return Plan{}, errors.New("build executable continuation Plan: Plan ID could not be calculated")
+	}
+	if err := Validate(value); err != nil {
+		return Plan{}, fmt.Errorf("build executable continuation Plan: %w", err)
+	}
+	return value, nil
+}

@@ -15,15 +15,12 @@ func BuildContinuationPlan(source Record, assessment ContinuationAssessment, pre
 	if err := ValidateRecord(source); err != nil {
 		return plan.Plan{}, errors.New("build continuation Plan: source operation record is invalid")
 	}
-	if source.SchemaVersion != RecordSchemaVersion || source.ConfirmedPlan == nil {
+	if !supportedContinuationSource(source) {
 		return plan.Plan{}, errors.New("build continuation Plan: source operation has no confirmed Plan provenance")
 	}
 	if source.State != StateFailed && source.State != StateTimedOut &&
 		source.State != StateCancelled && source.State != StateInterrupted {
 		return plan.Plan{}, errors.New("build continuation Plan: source operation is not an eligible terminal failure")
-	}
-	if source.ConfirmedPlan.SchemaVersion != plan.ExecutableSchemaVersion {
-		return plan.Plan{}, errors.New("build continuation Plan: only an R1/R2 Plan 0.2.0 source is supported")
 	}
 	if !assessment.Eligible || assessment.Blocker != nil ||
 		assessment.SourceOperationID != source.ID || assessment.SourcePlanID != source.PlanID {

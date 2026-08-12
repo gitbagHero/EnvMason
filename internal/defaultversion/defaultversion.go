@@ -164,6 +164,71 @@ func (service Service) PrepareRestore(ctx context.Context, options RestoreOption
 	}, nil
 }
 
+// ReviewRestore performs the read-only current-state review required before a
+// caller decides whether to prepare a new R3 restore Plan.
+func (service Service) ReviewRestore(
+	ctx context.Context,
+	options RestoreOptions,
+) (execution.RecoveryRevalidation, error) {
+	if err := ValidateRestoreOptions(options); err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	if err := service.validateReadOnly(); err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	root, err := service.historyRoot()
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	source, err := (execution.FileStore{Root: root}).Load(options.OperationID)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, fmt.Errorf("load source default operation: %w", err)
+	}
+	assessment, err := execution.AssessRecovery(source)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	if !reviewableDefaultSource(source) {
+		return execution.RecoveryRevalidation{}, errors.New("source operation is not an NVM set-default action")
+	}
+	hasChanged := false
+	for _, candidate := range assessment.Candidates {
+		hasChanged = hasChanged || candidate.Evidence == execution.RecoveryEvidenceChanged
+	}
+	if !hasChanged {
+		registry, registryErr := execution.NewRegistry()
+		if registryErr != nil {
+			return execution.RecoveryRevalidation{}, registryErr
+		}
+		return execution.RevalidateRecovery(ctx, source, registry)
+	}
+
+	value, err := service.Scan(ctx)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, fmt.Errorf("scan before recovery review: %w", err)
+	}
+	_, adapterOptions, err := service.inspect(value)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	after := source.Steps[0].After
+	if after == nil {
+		return execution.RecoveryRevalidation{}, errors.New("source operation has no NVM default after-state")
+	}
+	target, err := normalizeVersion(after.Facts["default_version"])
+	if err != nil {
+		return execution.RecoveryRevalidation{}, errors.New("source operation has an invalid NVM default after-state")
+	}
+	definition := nvm.SetDefaultDefinition(nvm.DefaultOptions{
+		Options: adapterOptions, DesiredAlias: after.Facts["default_alias"], DesiredVersion: target,
+	})
+	registry, err := execution.NewRegistry(definition)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	return execution.RevalidateRecovery(ctx, source, registry)
+}
+
 func (service Service) Execute(ctx context.Context, prepared Prepared, receipt execution.ConfirmationReceipt) (Result, error) {
 	if err := plan.Validate(prepared.Plan); err != nil {
 		return Result{}, err
@@ -263,6 +328,16 @@ func (service Service) validate() error {
 	return nil
 }
 
+func (service Service) validateReadOnly() error {
+	if service.GOOS != "darwin" {
+		return fmt.Errorf("Node/NVM default changes are unsupported on %s in I16", service.GOOS)
+	}
+	if service.Scan == nil || service.LookupEnv == nil {
+		return errors.New("default read-only service dependencies are incomplete")
+	}
+	return nil
+}
+
 func (service Service) historyRoot() (string, error) {
 	if service.HistoryRoot != "" {
 		return service.HistoryRoot, nil
@@ -295,6 +370,20 @@ func recoverableSnapshots(source execution.Record) (execution.Snapshot, executio
 		return execution.Snapshot{}, execution.Snapshot{}, errors.New("source operation did not change the NVM default alias")
 	}
 	return before, after, nil
+}
+
+func reviewableDefaultSource(source execution.Record) bool {
+	if source.ConfirmedPlan == nil || len(source.ConfirmedPlan.Actions) != 1 ||
+		len(source.Steps) != 1 {
+		return false
+	}
+	action := source.ConfirmedPlan.Actions[0]
+	step := source.Steps[0]
+	return action.ID == step.ActionID && action.ToolID == "runtime.node" &&
+		action.Operation == "set_default" && action.Adapter == "nvm" &&
+		action.Risk == plan.RiskR3 && step.ToolID == action.ToolID &&
+		step.Operation == action.Operation && step.Adapter == action.Adapter &&
+		step.Risk == action.Risk
 }
 
 func activeNode(value inventory.Inventory, home string) (string, string) {

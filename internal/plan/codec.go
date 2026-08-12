@@ -59,7 +59,9 @@ func ValidateJSON(data []byte) error {
 		return fmt.Errorf("parse plan JSON: %w", err)
 	}
 	if envelope.SchemaVersion != SchemaVersion && envelope.SchemaVersion != ExecutableSchemaVersion &&
-		envelope.SchemaVersion != HighRiskExecutableSchemaVersion && envelope.SchemaVersion != ContinuationSchemaVersion {
+		envelope.SchemaVersion != HighRiskExecutableSchemaVersion &&
+		envelope.SchemaVersion != ContinuationSchemaVersion &&
+		envelope.SchemaVersion != ExecutableContinuationSchemaVersion {
 		return fmt.Errorf("validate plan JSON: unsupported schema_version %q", envelope.SchemaVersion)
 	}
 	schema, err := schemaForVersion(envelope.SchemaVersion)

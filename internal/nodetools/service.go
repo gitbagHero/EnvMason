@@ -37,6 +37,25 @@ type Prepared struct {
 type Result struct {
 	Record     execution.Record
 	RecordPath string
+	Outcome    *ContinuationOutcome
+}
+
+// ContinuationOutcome is redacted post-execution evidence for only the actions
+// in one final continuation Plan. It contains no executable paths, commands,
+// arguments, environment values or runner output.
+type ContinuationOutcome struct {
+	Actions []ContinuationActionOutcome `json:"actions"`
+}
+
+type ContinuationActionOutcome struct {
+	ActionID      string          `json:"action_id"`
+	ToolID        string          `json:"tool_id"`
+	BeforeVersion string          `json:"before_version"`
+	AfterVersion  string          `json:"after_version"`
+	TargetVersion string          `json:"target_version"`
+	Provider      string          `json:"provider"`
+	State         execution.State `json:"state"`
+	Verified      bool            `json:"verified"`
 }
 
 type Service struct {

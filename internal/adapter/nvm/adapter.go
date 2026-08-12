@@ -156,6 +156,9 @@ func Definition(options Options) execution.Definition {
 		Verify: func(ctx context.Context, action plan.Action, _ execution.ProcessResult) error {
 			return verify(ctx, options, action)
 		},
+		RevalidateCheckpoint: func(ctx context.Context, action plan.Action, recorded execution.Snapshot) (execution.Snapshot, error) {
+			return revalidateInstallCheckpoint(ctx, options, action, recorded)
+		},
 	}
 }
 
@@ -209,6 +212,9 @@ func defaultDefinition(operation string, options DefaultOptions) execution.Defin
 		Verify: func(ctx context.Context, action plan.Action, _ execution.ProcessResult) error {
 			return verifyDefault(ctx, options, action)
 		},
+		RevalidateCheckpoint: func(_ context.Context, action plan.Action, recorded execution.Snapshot) (execution.Snapshot, error) {
+			return revalidateDefaultCheckpoint(operation, options, action, recorded)
+		},
 	}
 }
 
@@ -217,6 +223,10 @@ func captureDefault(baseline Baseline, target string) (execution.Snapshot, error
 	if err != nil {
 		return execution.Snapshot{}, err
 	}
+	return defaultSnapshot(current, target)
+}
+
+func defaultSnapshot(current Baseline, target string) (execution.Snapshot, error) {
 	targetVersion, err := normalizedTarget(target)
 	if err != nil {
 		return execution.Snapshot{}, err
@@ -229,6 +239,83 @@ func captureDefault(baseline Baseline, target string) (execution.Snapshot, error
 		"installed_versions": strings.Join(current.InstalledVersions, ","),
 		"target_version":     "v" + targetVersion,
 	})
+}
+
+func revalidateDefaultCheckpoint(
+	operation string,
+	options DefaultOptions,
+	action plan.Action,
+	recorded execution.Snapshot,
+) (execution.Snapshot, error) {
+	target, err := normalizedTarget(action.TargetVersion)
+	if err != nil || action.ToolID != "runtime.node" || action.Operation != operation ||
+		action.Adapter != "nvm" || target != options.DesiredVersion ||
+		recorded.Facts["default_alias"] != options.DesiredAlias ||
+		recorded.Facts["default_version"] != "v"+target ||
+		recorded.Facts["target_version"] != "v"+target {
+		return execution.Snapshot{}, errors.New("NVM default checkpoint action or recorded target is invalid")
+	}
+	expectedScript, err := checkExpected(action.Preconditions, "adapter_script_digest_matches")
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	current, err := InspectDefault(options.Baseline.Directory, options.Baseline.ActiveVersion)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	if current.ScriptDigest != expectedScript {
+		return execution.Snapshot{}, errors.New("NVM script changed after the source operation")
+	}
+	observed, err := defaultSnapshot(current, action.TargetVersion)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expected, err := defaultCheckpointEvidence(recorded)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	actual, err := defaultCheckpointEvidence(observed)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	if expected.Digest != actual.Digest {
+		return execution.Snapshot{}, errors.New("NVM default checkpoint drifted")
+	}
+	return actual, nil
+}
+
+func defaultCheckpointEvidence(value execution.Snapshot) (execution.Snapshot, error) {
+	facts := map[string]string{
+		"active_version":     value.Facts["active_version"],
+		"default_alias":      value.Facts["default_alias"],
+		"default_alias_hash": value.Facts["default_alias_hash"],
+		"default_version":    value.Facts["default_version"],
+		"installed_versions": value.Facts["installed_versions"],
+		"target_version":     value.Facts["target_version"],
+	}
+	for _, candidate := range facts {
+		if candidate == "" {
+			return execution.Snapshot{}, errors.New("NVM default checkpoint evidence is incomplete")
+		}
+	}
+	return execution.NewSnapshot(facts)
+}
+
+func checkExpected(checks []plan.Check, kind string) (string, error) {
+	expected := ""
+	for _, check := range checks {
+		if check.Kind != kind {
+			continue
+		}
+		if expected != "" {
+			return "", errors.New("NVM default Plan contains duplicate checkpoint metadata")
+		}
+		expected = check.Expected
+	}
+	if expected == "" {
+		return "", errors.New("NVM default Plan is missing checkpoint metadata")
+	}
+	return expected, nil
 }
 
 func verifyDefault(ctx context.Context, options DefaultOptions, action plan.Action) error {
@@ -316,6 +403,76 @@ func capture(baseline Baseline, target string) (execution.Snapshot, error) {
 		"installed_versions": strings.Join(versions, ","),
 		"target_installed":   installed,
 	})
+}
+
+func revalidateInstallCheckpoint(
+	ctx context.Context,
+	options Options,
+	action plan.Action,
+	recorded execution.Snapshot,
+) (execution.Snapshot, error) {
+	target, err := normalizedTarget(action.TargetVersion)
+	if err != nil || action.ToolID != "runtime.node" ||
+		action.Operation != "install_version" || action.Adapter != "nvm" {
+		return execution.Snapshot{}, errors.New("NVM install checkpoint action is invalid")
+	}
+	expectedScript, err := checkExpected(action.Preconditions, "adapter_script_digest_matches")
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	current, err := Inspect(options.Baseline.Directory, options.Baseline.ActiveVersion)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	if current.ScriptDigest != expectedScript {
+		return execution.Snapshot{}, errors.New("NVM script changed after the source operation")
+	}
+	observed, err := capture(current, target)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	expected, err := installCheckpointEvidence(recorded)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	actual, err := installCheckpointEvidence(observed)
+	if err != nil {
+		return execution.Snapshot{}, err
+	}
+	if expected.Digest != actual.Digest {
+		return execution.Snapshot{}, errors.New("NVM install checkpoint drifted")
+	}
+	if recorded.Facts["target_installed"] == "true" {
+		binary, err := targetBinary(options.Baseline.Directory, target)
+		if err != nil {
+			return execution.Snapshot{}, err
+		}
+		result := (execution.OSRunner{}).Run(ctx, execution.CommandSpec{
+			Executable: binary, Args: []string{"--version"},
+			Environment: []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin"}, Timeout: 10 * time.Second,
+		})
+		got, parseErr := normalizedTarget(strings.TrimSpace(result.Stdout.Text))
+		if result.Failure != nil || result.ExitCode == nil || *result.ExitCode != 0 ||
+			parseErr != nil || got != target {
+			return execution.Snapshot{}, errors.New("NVM install checkpoint target version changed")
+		}
+	}
+	return actual, nil
+}
+
+func installCheckpointEvidence(value execution.Snapshot) (execution.Snapshot, error) {
+	facts := map[string]string{
+		"active_version":     value.Facts["active_version"],
+		"default_alias_hash": value.Facts["default_alias_hash"],
+		"installed_versions": value.Facts["installed_versions"],
+		"target_installed":   value.Facts["target_installed"],
+	}
+	for key, candidate := range facts {
+		if candidate == "" || (key == "target_installed" && candidate != "true" && candidate != "false") {
+			return execution.Snapshot{}, errors.New("NVM install checkpoint evidence is incomplete")
+		}
+	}
+	return execution.NewSnapshot(facts)
 }
 
 func verify(ctx context.Context, options Options, action plan.Action) error {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -66,6 +67,7 @@ func ValidateRecordJSON(data []byte) error {
 		return fmt.Errorf("parse operation record JSON: %w", err)
 	}
 	if envelope.SchemaVersion != RecordSchemaVersion && envelope.SchemaVersion != PreviousRecordSchemaVersion &&
+		envelope.SchemaVersion != OlderRecordSchemaVersion &&
 		envelope.SchemaVersion != LegacyRecordSchemaVersion {
 		return fmt.Errorf("validate operation record JSON: unsupported schema_version %q", envelope.SchemaVersion)
 	}
@@ -85,6 +87,7 @@ func ValidateRecordJSON(data []byte) error {
 
 func ValidateRecord(value Record) error {
 	if (value.SchemaVersion != RecordSchemaVersion && value.SchemaVersion != PreviousRecordSchemaVersion &&
+		value.SchemaVersion != OlderRecordSchemaVersion &&
 		value.SchemaVersion != LegacyRecordSchemaVersion) || !operationIDPattern.MatchString(value.ID) ||
 		!planIDPattern.MatchString(value.PlanID) || value.PlanSchemaVersion == "" {
 		return errors.New("validate operation record: identity is incomplete")
@@ -168,9 +171,10 @@ func ValidateRecord(value Record) error {
 }
 
 func validateConfirmedPlan(value Record) error {
-	if value.SchemaVersion != RecordSchemaVersion {
+	allowedVersions := confirmedPlanVersions(value.SchemaVersion)
+	if len(allowedVersions) == 0 {
 		if value.ConfirmedPlan != nil {
-			return errors.New("validate operation record: legacy record cannot contain confirmed Plan")
+			return errors.New("validate operation record: record schema cannot contain confirmed Plan")
 		}
 		return nil
 	}
@@ -184,8 +188,7 @@ func validateConfirmedPlan(value Record) error {
 	if value.Confirmation.ConfirmedAt.Before(confirmed.CreatedAt) || value.CreatedAt.After(confirmed.ExpiresAt) {
 		return errors.New("validate operation record: confirmed Plan was not valid when execution started")
 	}
-	if !confirmed.Executable ||
-		(confirmed.SchemaVersion != plan.ExecutableSchemaVersion && confirmed.SchemaVersion != plan.HighRiskExecutableSchemaVersion) ||
+	if !confirmed.Executable || !slices.Contains(allowedVersions, confirmed.SchemaVersion) ||
 		confirmed.ID != value.PlanID || confirmed.SchemaVersion != value.PlanSchemaVersion ||
 		confirmed.ID != value.Confirmation.ConfirmedPlanID {
 		return errors.New("validate operation record: confirmed Plan identity does not match record")
@@ -202,6 +205,24 @@ func validateConfirmedPlan(value Record) error {
 		}
 	}
 	return nil
+}
+
+func confirmedPlanVersions(recordVersion string) []string {
+	switch recordVersion {
+	case RecordSchemaVersion:
+		return []string{
+			plan.ExecutableSchemaVersion,
+			plan.HighRiskExecutableSchemaVersion,
+			plan.ExecutableContinuationSchemaVersion,
+		}
+	case PreviousRecordSchemaVersion:
+		return []string{
+			plan.ExecutableSchemaVersion,
+			plan.HighRiskExecutableSchemaVersion,
+		}
+	default:
+		return nil
+	}
 }
 
 func validState(state State) bool {
@@ -243,19 +264,17 @@ func recordSchema(version string) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	compiler.AssertFormat()
-	if version == RecordSchemaVersion {
-		for _, planVersion := range []string{plan.ExecutableSchemaVersion, plan.HighRiskExecutableSchemaVersion} {
-			planData, planID, ok := planschema.ByVersion(planVersion)
-			if !ok {
-				return nil, fmt.Errorf("unsupported confirmed Plan schema_version %q", planVersion)
-			}
-			planDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(planData))
-			if err != nil {
-				return nil, err
-			}
-			if err := compiler.AddResource(planID, planDocument); err != nil {
-				return nil, err
-			}
+	for _, planVersion := range confirmedPlanVersions(version) {
+		planData, planID, ok := planschema.ByVersion(planVersion)
+		if !ok {
+			return nil, fmt.Errorf("unsupported confirmed Plan schema_version %q", planVersion)
+		}
+		planDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(planData))
+		if err != nil {
+			return nil, err
+		}
+		if err := compiler.AddResource(planID, planDocument); err != nil {
+			return nil, err
 		}
 	}
 	if err := compiler.AddResource(id, document); err != nil {

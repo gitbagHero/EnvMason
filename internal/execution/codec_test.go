@@ -2,6 +2,7 @@ package execution
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/gitbagHero/EnvMason/internal/plan"
@@ -18,7 +19,7 @@ func TestOperationCodecRejectsUnknownFieldsTrailingJSONAndFalseCompletion(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	unknown := bytes.Replace(data, []byte(`"schema_version": "0.3.0"`), []byte(`"schema_version": "0.3.0", "unknown": true`), 1)
+	unknown := bytes.Replace(data, []byte(`"schema_version": "0.4.0"`), []byte(`"schema_version": "0.4.0", "unknown": true`), 1)
 	if _, err := DecodeRecord(unknown); err == nil {
 		t.Fatal("unknown field was accepted")
 	}
@@ -85,20 +86,104 @@ func TestOperationCodecRetainsPriorReadCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, version := range []string{PreviousRecordSchemaVersion, LegacyRecordSchemaVersion} {
+	for _, version := range []string{
+		PreviousRecordSchemaVersion,
+		OlderRecordSchemaVersion,
+		LegacyRecordSchemaVersion,
+	} {
 		version := version
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
 			compatible := cloneRecord(t, record)
 			compatible.SchemaVersion = version
-			compatible.ConfirmedPlan = nil
+			if version == OlderRecordSchemaVersion || version == LegacyRecordSchemaVersion {
+				compatible.ConfirmedPlan = nil
+			}
+			if version == LegacyRecordSchemaVersion {
+				for index := range compatible.Steps {
+					compatible.Steps[index].Before = nil
+					compatible.Steps[index].After = nil
+					compatible.Steps[index].Diff = nil
+					compatible.Steps[index].Skipped = false
+				}
+			}
 			data, err := MarshalRecord(compatible)
 			if err != nil {
 				t.Fatal(err)
 			}
 			decoded, err := DecodeRecord(data)
-			if err != nil || decoded.SchemaVersion != version || decoded.ConfirmedPlan != nil {
+			wantConfirmed := version == PreviousRecordSchemaVersion
+			if err != nil || decoded.SchemaVersion != version ||
+				(decoded.ConfirmedPlan != nil) != wantConfirmed {
 				t.Fatalf("decode %s = %#v, %v", version, decoded, err)
+			}
+		})
+	}
+}
+
+func TestOperationCodecAcceptsAndBindsExecutableContinuationPlanOnlyInRecord04(t *testing.T) {
+	t.Parallel()
+	record, _ := executableContinuationSource(t, "update-corepack")
+	data, err := MarshalRecord(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeRecord(data)
+	if err != nil || decoded.SchemaVersion != RecordSchemaVersion ||
+		decoded.ConfirmedPlan == nil ||
+		decoded.ConfirmedPlan.SchemaVersion != plan.ExecutableContinuationSchemaVersion ||
+		decoded.ConfirmedPlan.ID != decoded.PlanID {
+		t.Fatalf("Record 0.4 executable continuation = %#v, %v", decoded, err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*Record)
+	}{
+		{
+			name:   "Record 0.3 cannot contain Plan 0.5",
+			mutate: func(value *Record) { value.SchemaVersion = PreviousRecordSchemaVersion },
+		},
+		{
+			name: "confirmed Plan ID",
+			mutate: func(value *Record) {
+				value.ConfirmedPlan.ID = "sha256:" + strings.Repeat("f", 64)
+			},
+		},
+		{
+			name: "confirmed Plan target",
+			mutate: func(value *Record) {
+				value.ConfirmedPlan.Actions[0].TargetVersion = "99.0.0"
+			},
+		},
+		{
+			name: "confirmed Plan dependency",
+			mutate: func(value *Record) {
+				value.ConfirmedPlan.Actions[1].Dependencies = []string{}
+			},
+		},
+		{
+			name: "confirmation identity",
+			mutate: func(value *Record) {
+				value.Confirmation.ConfirmedPlanID = "sha256:" + strings.Repeat("e", 64)
+			},
+		},
+		{
+			name:   "step identity",
+			mutate: func(value *Record) { value.Steps[0].Adapter = "changed" },
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			candidate, err := DecodeRecord(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(&candidate)
+			if _, err := MarshalRecord(candidate); err == nil {
+				t.Fatal("mutated executable continuation record was accepted")
 			}
 		})
 	}

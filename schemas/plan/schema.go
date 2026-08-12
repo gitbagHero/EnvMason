@@ -7,21 +7,26 @@ import (
 )
 
 const (
-	Version           = "0.4.0"
-	ID                = "urn:envmason:schema:plan:0.4.0"
-	PreviousVersion   = "0.3.0"
-	PreviousID        = "urn:envmason:schema:plan:0.3.0"
+	Version           = "0.5.0"
+	ID                = "urn:envmason:schema:plan:0.5.0"
+	PreviousVersion   = "0.4.0"
+	PreviousID        = "urn:envmason:schema:plan:0.4.0"
+	HighRiskVersion   = "0.3.0"
+	HighRiskID        = "urn:envmason:schema:plan:0.3.0"
 	ExecutableVersion = "0.2.0"
 	ExecutableID      = "urn:envmason:schema:plan:0.2.0"
 	LegacyVersion     = "0.1.0"
 	LegacyID          = "urn:envmason:schema:plan:0.1.0"
 )
 
-//go:embed v0.4.0.json
+//go:embed v0.5.0.json
 var current []byte
 
-//go:embed v0.3.0.json
+//go:embed v0.4.0.json
 var previous []byte
+
+//go:embed v0.3.0.json
+var highRisk []byte
 
 //go:embed v0.2.0.json
 var executable []byte
@@ -37,6 +42,8 @@ func ByVersion(version string) ([]byte, string, bool) {
 		return bytes.Clone(current), ID, true
 	case PreviousVersion:
 		return bytes.Clone(previous), PreviousID, true
+	case HighRiskVersion:
+		return bytes.Clone(highRisk), HighRiskID, true
 	case ExecutableVersion:
 		return bytes.Clone(executable), ExecutableID, true
 	case LegacyVersion:
