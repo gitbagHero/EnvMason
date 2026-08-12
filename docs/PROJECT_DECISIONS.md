@@ -1390,6 +1390,6 @@
 - 隐私与执行隔离：输出序列化断言不含 brew 路径、官方 catalog URI、配置键值、镜像/凭据样本；实现不导入或调用 os/exec/net/http，不含 Registry、CommandSpec、文件写入或进程入口。CLI 与既有执行注册表均未修改，Homebrew Action 继续为 unregistered。
 - 提交前审查：以 2026-08-12 的官方 formula catalog 抽查发现 8540 个 formula 中有 6 个无关 formula 使用合法的非数字前缀版本；据此将严格版本规则收窄到 Git/CMake 可达闭包并增加双向回归测试。审查同时补上 active Homebrew 目标架构绑定、其他架构 formula 不计为满足、目标架构旧版依赖冲突停止，以及不可显示配置键名不进入错误信息；未发现遗留阻断项。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off go test -count=1 ./internal/baseinstall` 以及 Linux/Windows amd64 目标构建均通过。`internal/baseinstall` 语句覆盖率为 86.8%，`git diff --check` 通过。
-- 远程检查：首次分支 CI #31579880066 的 Ubuntu/macOS × Go 1.25/1.26 四项通过，Windows × Go 1.25/1.26 两项发现纯核心错误使用宿主 `filepath.IsAbs`，使 Windows 将目标 macOS 路径误判为相对路径。修复改用固定 POSIX/macOS 路径语义并增加跨平台回归测试；本地门禁通过且维护者已授权提交与推送，远端复验待本次修复提交。
+- 远程检查：首次分支 CI #31579880066 的 Ubuntu/macOS × Go 1.25/1.26 四项通过，Windows × Go 1.25/1.26 两项发现纯核心错误使用宿主 `filepath.IsAbs`，使 Windows 将目标 macOS 路径误判为相对路径。修复改用固定 POSIX/macOS 路径语义并增加跨平台回归测试；修复后的分支 CI #31580456682 在 Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部通过。
 - N/A：本增量不提供公开 CLI/Schema，不自行发现/读取路径，不调用 Homebrew/Shell/网络，不执行/注册 `brew install`，不写 Operation/Plan/Lock，不 bootstrap、不卸载、不生成执行后 Lock/diff，也不完成 I21。
-- 结论：I21-C 首次远端门禁发现跨平台路径语义问题，当前停留在本增量修复；只有修复提交、推送且远端 CI 全绿后才能完成阶段三并进入 I21-D。下一安全增量仍应先冻结固定 Homebrew 写适配器、重新采集/确认、失败记录和恢复边界；不得仅因事务事实已齐全就开放执行。
+- 结论：I21-C 本地与远端客观验收全部完成，阶段三完成并停在 PR/合并授权前。合并后才能冻结并进入 I21-D 固定 Homebrew 写适配器、重新采集/确认、失败记录和恢复边界；不得仅因事务事实已齐全就开放执行。
