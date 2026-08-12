@@ -3,6 +3,8 @@ package execution
 import (
 	"context"
 	"errors"
+
+	"github.com/gitbagHero/EnvMason/internal/plan"
 )
 
 type ContinuationBlockCode string
@@ -53,7 +55,7 @@ func AssessContinuation(ctx context.Context, source Record, registry Registry) (
 	if err := ValidateRecord(source); err != nil {
 		return ContinuationAssessment{}, errors.New("assess continuation: source operation record is invalid")
 	}
-	if source.SchemaVersion != RecordSchemaVersion || source.ConfirmedPlan == nil {
+	if !supportedContinuationSource(source) {
 		return blockContinuation(assessment, ContinuationBlockUnsupportedRecord, "", "source record has no confirmed Plan provenance"), nil
 	}
 	switch source.State {
@@ -128,6 +130,21 @@ func AssessContinuation(ctx context.Context, source Record, registry Registry) (
 	}
 	assessment.Eligible = true
 	return assessment, nil
+}
+
+func supportedContinuationSource(source Record) bool {
+	if source.ConfirmedPlan == nil {
+		return false
+	}
+	switch source.SchemaVersion {
+	case PreviousRecordSchemaVersion:
+		return source.ConfirmedPlan.SchemaVersion == plan.ExecutableSchemaVersion
+	case RecordSchemaVersion:
+		return source.ConfirmedPlan.SchemaVersion == plan.ExecutableSchemaVersion ||
+			source.ConfirmedPlan.SchemaVersion == plan.ExecutableContinuationSchemaVersion
+	default:
+		return false
+	}
 }
 
 func blockContinuation(assessment ContinuationAssessment, code ContinuationBlockCode, actionID, message string) ContinuationAssessment {

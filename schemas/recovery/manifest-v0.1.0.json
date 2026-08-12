@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:envmason:schema:recovery-manifest:0.1.0",
+  "title": "EnvMason Recovery Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "created_at",
+    "executable",
+    "confirmable",
+    "summary",
+    "sources",
+    "items"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "id": {
+      "$ref": "#/$defs/digest"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "executable": {
+      "const": false
+    },
+    "confirmable": {
+      "const": false
+    },
+    "summary": {
+      "const": "Review-only recovery candidates and dispositions; this manifest cannot confirm, execute or restore anything."
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "operation_id": {
+      "type": "string",
+      "pattern": "^op-[a-f0-9]{32}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "plan_id"
+      ],
+      "properties": {
+        "operation_id": {
+          "$ref": "#/$defs/operation_id"
+        },
+        "plan_id": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "item_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_operation_id",
+        "source_plan_id",
+        "action_id",
+        "tool_id",
+        "operation",
+        "step_state",
+        "evidence",
+        "current_state",
+        "recovery_mode",
+        "disposition",
+        "recovery_summary"
+      ],
+      "properties": {
+        "source_operation_id": {
+          "$ref": "#/$defs/operation_id"
+        },
+        "source_plan_id": {
+          "$ref": "#/$defs/digest"
+        },
+        "action_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "tool_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "step_state": {
+          "enum": [
+            "completed",
+            "failed",
+            "timed_out",
+            "cancelled",
+            "interrupted"
+          ]
+        },
+        "evidence": {
+          "enum": [
+            "changed",
+            "uncertain"
+          ]
+        },
+        "current_state": {
+          "enum": [
+            "current",
+            "drifted",
+            "uncertain",
+            "verifier_unavailable"
+          ]
+        },
+        "recovery_mode": {
+          "enum": [
+            "plan",
+            "manual"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "prepare_new_plan",
+            "manual_action",
+            "investigate_uncertain",
+            "reassess_drifted",
+            "review_without_verifier"
+          ]
+        },
+        "recovery_summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "item": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/item_fields"
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "evidence": {
+                  "const": "changed"
+                },
+                "current_state": {
+                  "const": "current"
+                },
+                "recovery_mode": {
+                  "const": "plan"
+                },
+                "disposition": {
+                  "const": "prepare_new_plan"
+                }
+              }
+            },
+            {
+              "properties": {
+                "evidence": {
+                  "const": "changed"
+                },
+                "current_state": {
+                  "const": "current"
+                },
+                "recovery_mode": {
+                  "const": "manual"
+                },
+                "disposition": {
+                  "const": "manual_action"
+                }
+              }
+            },
+            {
+              "properties": {
+                "evidence": {
+                  "const": "uncertain"
+                },
+                "current_state": {
+                  "const": "uncertain"
+                },
+                "disposition": {
+                  "const": "investigate_uncertain"
+                }
+              }
+            },
+            {
+              "properties": {
+                "evidence": {
+                  "const": "changed"
+                },
+                "current_state": {
+                  "const": "drifted"
+                },
+                "disposition": {
+                  "const": "reassess_drifted"
+                }
+              }
+            },
+            {
+              "properties": {
+                "evidence": {
+                  "const": "changed"
+                },
+                "current_state": {
+                  "const": "verifier_unavailable"
+                },
+                "disposition": {
+                  "const": "review_without_verifier"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

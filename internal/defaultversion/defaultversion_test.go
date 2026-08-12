@@ -1,7 +1,9 @@
 package defaultversion
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -172,6 +174,143 @@ func TestSecondFreshSetPlanSkipsSatisfiedAliasAndStillVerifies(t *testing.T) {
 	}
 }
 
+func TestReviewRestoreReportsCurrentAndDriftWithoutWrites(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I16 NVM execution is macOS-only and fixture requires bash")
+	}
+	service, directory, clock := defaultFixtureService(t)
+	prepared, err := service.PrepareSet(t.Context(), SetOptions{ToolID: "runtime.node", Version: "24.14.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*clock = defaultTestTime.Add(time.Minute)
+	result, err := service.Execute(t.Context(), prepared, receipt(prepared.Plan, defaultTestTime.Add(30*time.Second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordPath := filepath.Join(service.HistoryRoot, result.Record.ID+".json")
+	beforeRecord, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scans := 0
+	originalScan := service.Scan
+	service.Scan = func(ctx context.Context) (inventory.Inventory, error) {
+		scans++
+		return originalScan(ctx)
+	}
+	service.Runner = nil
+
+	review, err := service.ReviewRestore(t.Context(), RestoreOptions{OperationID: result.Record.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 || len(review.Candidates) != 1 ||
+		review.Candidates[0].ActionID != "set-node-default" ||
+		review.Candidates[0].CurrentState != execution.RecoveryCheckpointCurrent ||
+		readDefaultAlias(t, directory) != "v24.14.0" {
+		t.Fatalf("current review = %#v, scans = %d", review, scans)
+	}
+	afterRecord, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeRecord, afterRecord) {
+		t.Fatal("recovery review changed its source operation record")
+	}
+	encoded, err := json.Marshal(review)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte(directory)) || bytes.Contains(encoded, []byte("default_alias_hash")) {
+		t.Fatalf("recovery review leaked private checkpoint facts: %s", encoded)
+	}
+
+	if err := os.WriteFile(filepath.Join(directory, "alias", "default"), []byte("22\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scans = 0
+	drifted, err := service.ReviewRestore(t.Context(), RestoreOptions{OperationID: result.Record.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 || len(drifted.Candidates) != 1 ||
+		drifted.Candidates[0].CurrentState != execution.RecoveryCheckpointDrifted ||
+		readDefaultAlias(t, directory) != "22" {
+		t.Fatalf("drifted review = %#v, scans = %d", drifted, scans)
+	}
+}
+
+func TestReviewRestoreKeepsUncertainSourceReadOnlyWithoutScan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I16 NVM execution is macOS-only and fixture requires bash")
+	}
+	service, directory, clock := defaultFixtureService(t)
+	prepared, err := service.PrepareSet(t.Context(), SetOptions{ToolID: "runtime.node", Version: "24.14.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.Runner = defaultFailureRunner{}
+	*clock = defaultTestTime.Add(time.Minute)
+	result, err := service.Execute(t.Context(), prepared, receipt(prepared.Plan, defaultTestTime.Add(30*time.Second)))
+	if err == nil || result.Record.State != execution.StateFailed {
+		t.Fatalf("injected failure = %#v, %v", result, err)
+	}
+	scans := 0
+	service.Scan = func(context.Context) (inventory.Inventory, error) {
+		scans++
+		return inventory.Inventory{}, errors.New("scan must not be called")
+	}
+
+	review, err := service.ReviewRestore(t.Context(), RestoreOptions{OperationID: result.Record.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 0 || len(review.Candidates) != 1 ||
+		review.Candidates[0].CurrentState != execution.RecoveryCheckpointUncertain ||
+		readDefaultAlias(t, directory) != "22" {
+		t.Fatalf("uncertain review = %#v, scans = %d", review, scans)
+	}
+}
+
+func TestReviewRestoreRejectsRestoreOperationBeforeScanning(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I16 NVM execution is macOS-only and fixture requires bash")
+	}
+	service, _, clock := defaultFixtureService(t)
+	setPlan, err := service.PrepareSet(t.Context(), SetOptions{ToolID: "runtime.node", Version: "24.14.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*clock = defaultTestTime.Add(time.Minute)
+	setResult, err := service.Execute(t.Context(), setPlan, receipt(setPlan.Plan, defaultTestTime.Add(30*time.Second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	*clock = defaultTestTime.Add(2 * time.Minute)
+	restorePlan, err := service.PrepareRestore(t.Context(), RestoreOptions{OperationID: setResult.Record.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*clock = defaultTestTime.Add(3 * time.Minute)
+	restoreResult, err := service.Execute(t.Context(), restorePlan, receipt(restorePlan.Plan, defaultTestTime.Add(150*time.Second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scans := 0
+	service.Scan = func(context.Context) (inventory.Inventory, error) {
+		scans++
+		return inventory.Inventory{}, errors.New("scan must not be called")
+	}
+	service.Runner = nil
+
+	if _, err := service.ReviewRestore(t.Context(), RestoreOptions{OperationID: restoreResult.Record.ID}); err == nil ||
+		!strings.Contains(err.Error(), "not an NVM set-default") ||
+		scans != 0 {
+		t.Fatalf("restore-source review error = %v, scans = %d", err, scans)
+	}
+}
+
 func defaultFixtureService(t *testing.T) (Service, string, *time.Time) {
 	t.Helper()
 	directory := t.TempDir()
@@ -275,4 +414,16 @@ func readDefaultAlias(t *testing.T, directory string) string {
 
 func receipt(value plan.Plan, confirmedAt time.Time) execution.ConfirmationReceipt {
 	return execution.ConfirmationReceipt{Scope: "plan", ConfirmedPlanID: value.ID, ConfirmedAt: confirmedAt}
+}
+
+type defaultFailureRunner struct{}
+
+func (defaultFailureRunner) Run(context.Context, execution.CommandSpec) execution.ProcessResult {
+	code := 42
+	return execution.ProcessResult{
+		ExitCode: &code,
+		Failure: &execution.ExecutionError{
+			Code: execution.CodeExitNonZero, Message: "injected write failure",
+		},
+	}
 }

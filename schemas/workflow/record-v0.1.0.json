@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:envmason:schema:workflow-record:0.1.0",
+  "title": "EnvMason Staged Workflow Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "manifest_id",
+    "state",
+    "created_at",
+    "updated_at",
+    "stages",
+    "transitions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^wf-[a-f0-9]{32}$"
+    },
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "state": {
+      "$ref": "#/$defs/workflow_state"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/install_stage_record"
+        },
+        {
+          "$ref": "#/$defs/default_stage_record"
+        },
+        {
+          "$ref": "#/$defs/tools_stage_record"
+        }
+      ],
+      "items": false
+    },
+    "transitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/transition"
+      }
+    }
+  },
+  "$defs": {
+    "workflow_state": {
+      "enum": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "interrupted"
+      ]
+    },
+    "stage_state": {
+      "enum": [
+        "pending",
+        "ready",
+        "planned",
+        "running",
+        "completed",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "interrupted"
+      ]
+    },
+    "stage_record_properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "install_node",
+            "set_default",
+            "update_node_tools"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/stage_state"
+        },
+        "plan_id": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "plan_schema_version": {
+          "enum": [
+            "0.2.0",
+            "0.3.0"
+          ]
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^op-[a-f0-9]{32}$"
+        },
+        "checkpoint_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "install_stage_record": {
+      "$ref": "#/$defs/stage_record_properties",
+      "properties": {
+        "id": {
+          "const": "install_node"
+        },
+        "plan_schema_version": {
+          "const": "0.2.0"
+        }
+      }
+    },
+    "default_stage_record": {
+      "$ref": "#/$defs/stage_record_properties",
+      "properties": {
+        "id": {
+          "const": "set_default"
+        },
+        "plan_schema_version": {
+          "const": "0.3.0"
+        }
+      }
+    },
+    "tools_stage_record": {
+      "$ref": "#/$defs/stage_record_properties",
+      "properties": {
+        "id": {
+          "const": "update_node_tools"
+        },
+        "plan_schema_version": {
+          "const": "0.2.0"
+        }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage_id",
+        "from",
+        "to",
+        "workflow_state",
+        "at",
+        "reason"
+      ],
+      "properties": {
+        "stage_id": {
+          "enum": [
+            "install_node",
+            "set_default",
+            "update_node_tools"
+          ]
+        },
+        "from": {
+          "$ref": "#/$defs/stage_state"
+        },
+        "to": {
+          "$ref": "#/$defs/stage_state"
+        },
+        "workflow_state": {
+          "$ref": "#/$defs/workflow_state"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

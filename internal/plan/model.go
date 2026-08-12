@@ -6,11 +6,12 @@ package plan
 import "time"
 
 const (
-	SchemaVersion                   = "0.1.0"
-	ExecutableSchemaVersion         = "0.2.0"
-	HighRiskExecutableSchemaVersion = "0.3.0"
-	ContinuationSchemaVersion       = "0.4.0"
-	DefaultTTL                      = 30 * time.Minute
+	SchemaVersion                       = "0.1.0"
+	ExecutableSchemaVersion             = "0.2.0"
+	HighRiskExecutableSchemaVersion     = "0.3.0"
+	ContinuationSchemaVersion           = "0.4.0"
+	ExecutableContinuationSchemaVersion = "0.5.0"
+	DefaultTTL                          = 30 * time.Minute
 )
 
 type Risk string
@@ -37,7 +38,7 @@ type Plan struct {
 	Continuation      *Continuation      `json:"continuation,omitempty"`
 }
 
-// Continuation binds a review-only Plan to the terminal operation, confirmed
+// Continuation binds a continuation Plan to the terminal operation, confirmed
 // Plan, freshly prepared remaining Plan and revalidated checkpoints that
 // produced it. It deliberately contains no command or process specification.
 type Continuation struct {

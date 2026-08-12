@@ -111,6 +111,81 @@ func TestFixtureDownloadFailureIsNonZeroAndLeavesDefault(t *testing.T) {
 	}
 }
 
+func TestDefaultDefinitionRevalidatesActionScopedCheckpoint(t *testing.T) {
+	t.Parallel()
+	baseline := fixtureNVM(t, false)
+	resolved, err := InspectDefault(baseline.Directory, baseline.ActiveVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := DefaultOptions{
+		Options:      Options{Baseline: resolved},
+		DesiredAlias: "22", DesiredVersion: "22.0.0",
+	}
+	definition := SetDefaultDefinition(options)
+	action := plan.Action{
+		ID: "set-node-default", ToolID: "runtime.node", Operation: "set_default",
+		Adapter: "nvm", TargetVersion: "22.0.0", Risk: plan.RiskR3,
+		Preconditions: []plan.Check{{
+			Kind: "adapter_script_digest_matches", Subject: "nvm.sh", Expected: resolved.ScriptDigest,
+		}},
+	}
+	recorded, err := definition.Capture(t.Context(), action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := definition.RevalidateCheckpoint(t.Context(), action, recorded); err != nil {
+		t.Fatalf("matching checkpoint: %v", err)
+	}
+
+	for _, test := range []struct {
+		name   string
+		mutate func()
+	}{
+		{name: "alias", mutate: func() {
+			if err := os.WriteFile(filepath.Join(baseline.Directory, "alias", "default"), []byte("v22.0.0\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "script", mutate: func() {
+			if err := os.WriteFile(filepath.Join(baseline.Directory, "nvm.sh"), []byte("# changed\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "installed versions", mutate: func() {
+			createFixtureNode(t, baseline.Directory, "24.14.0")
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fresh := fixtureNVM(t, false)
+			current, inspectErr := InspectDefault(fresh.Directory, fresh.ActiveVersion)
+			if inspectErr != nil {
+				t.Fatal(inspectErr)
+			}
+			candidateOptions := options
+			candidateOptions.Baseline = current
+			candidate := SetDefaultDefinition(candidateOptions)
+			candidateAction := action
+			candidateAction.Preconditions[0].Expected = current.ScriptDigest
+			candidateRecorded, captureErr := candidate.Capture(t.Context(), candidateAction)
+			if captureErr != nil {
+				t.Fatal(captureErr)
+			}
+			baseline = fresh
+			test.mutate()
+			if _, revalidateErr := candidate.RevalidateCheckpoint(t.Context(), candidateAction, candidateRecorded); revalidateErr == nil {
+				t.Fatal("drifted checkpoint was accepted")
+			}
+		})
+	}
+
+	wrong := action
+	wrong.TargetVersion = "24.14.0"
+	if _, err := definition.RevalidateCheckpoint(t.Context(), wrong, recorded); err == nil {
+		t.Fatal("mismatched checkpoint action was accepted")
+	}
+}
+
 func TestPartialTargetDirectoryIsNotTreatedAsInstalled(t *testing.T) {
 	t.Parallel()
 	baseline := fixtureNVM(t, false)

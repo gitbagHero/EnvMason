@@ -169,6 +169,93 @@ func (service Service) Execute(ctx context.Context, prepared Prepared, receipt e
 	return result, err
 }
 
+// ReviewRecovery performs a read-only checkpoint review of one I15 NVM Node
+// installation record. It never assesses online versions, builds a Plan,
+// installs or removes a Node version, or writes operation history.
+func (service Service) ReviewRecovery(
+	ctx context.Context,
+	operationID string,
+) (execution.RecoveryRevalidation, error) {
+	if service.GOOS != "darwin" || service.Scan == nil || service.LookupEnv == nil {
+		return execution.RecoveryRevalidation{}, errors.New("NVM install recovery review requires the macOS apply read-only service")
+	}
+	root := service.HistoryRoot
+	var err error
+	if root == "" {
+		root, err = execution.DefaultHistoryDirectory()
+		if err != nil {
+			return execution.RecoveryRevalidation{}, err
+		}
+	}
+	source, err := (execution.FileStore{Root: root}).Load(operationID)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, fmt.Errorf("load source NVM install operation: %w", err)
+	}
+	assessmentResult, err := execution.AssessRecovery(source)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	if !reviewableInstallSource(source) {
+		return execution.RecoveryRevalidation{}, errors.New("source operation is not an NVM install_version action")
+	}
+	hasChanged := false
+	for _, candidate := range assessmentResult.Candidates {
+		hasChanged = hasChanged || candidate.Evidence == execution.RecoveryEvidenceChanged
+	}
+	if !hasChanged {
+		registry, registryErr := execution.NewRegistry()
+		if registryErr != nil {
+			return execution.RecoveryRevalidation{}, registryErr
+		}
+		return execution.RevalidateRecovery(ctx, source, registry)
+	}
+
+	value, err := service.Scan(ctx)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, fmt.Errorf("scan before NVM install recovery review: %w", err)
+	}
+	home := environment(service.LookupEnv, "HOME")
+	directory := nvm.Locate(environment(service.LookupEnv, "NVM_DIR"), environment(service.LookupEnv, "XDG_CONFIG_HOME"), home)
+	activeVersion, activeBinary := activeNode(value, home)
+	if !filepath.IsAbs(activeBinary) {
+		return execution.RecoveryRevalidation{}, errors.New("active Node.js executable path is unavailable for recovery review")
+	}
+	baseline, err := nvm.Inspect(directory, activeVersion)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	definition := nvm.Definition(nvm.Options{
+		Baseline: baseline, ActiveBinary: activeBinary, Home: home,
+		Temporary: environment(service.LookupEnv, "TMPDIR"),
+	})
+	registry, err := execution.NewRegistry(definition)
+	if err != nil {
+		return execution.RecoveryRevalidation{}, err
+	}
+	return execution.RevalidateRecovery(ctx, source, registry)
+}
+
+func reviewableInstallSource(source execution.Record) bool {
+	if source.ConfirmedPlan == nil ||
+		source.ConfirmedPlan.SchemaVersion != plan.ExecutableSchemaVersion ||
+		len(source.ConfirmedPlan.Actions) != 1 || len(source.Steps) != 1 {
+		return false
+	}
+	switch source.State {
+	case execution.StateCompleted, execution.StateFailed, execution.StateTimedOut,
+		execution.StateCancelled, execution.StateInterrupted:
+	default:
+		return false
+	}
+	action := source.ConfirmedPlan.Actions[0]
+	step := source.Steps[0]
+	return action.ID == step.ActionID && action.ToolID == "runtime.node" &&
+		action.Operation == "install_version" && action.Adapter == "nvm" &&
+		action.Risk == plan.RiskR2 && step.ToolID == action.ToolID &&
+		step.Operation == action.Operation && step.Adapter == action.Adapter &&
+		step.Risk == action.Risk
+}
+
 func (service Service) now() time.Time {
 	if service.Now != nil {
 		return service.Now().UTC()

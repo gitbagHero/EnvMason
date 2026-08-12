@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	RecordSchemaVersion         = "0.3.0"
-	PreviousRecordSchemaVersion = "0.2.0"
+	RecordSchemaVersion         = "0.4.0"
+	PreviousRecordSchemaVersion = "0.3.0"
+	OlderRecordSchemaVersion    = "0.2.0"
 	LegacyRecordSchemaVersion   = "0.1.0"
 	DefaultOutputLimit          = 64 << 10
 	MaximumTimeout              = 15 * time.Minute

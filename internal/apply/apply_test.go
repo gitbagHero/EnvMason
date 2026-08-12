@@ -1,7 +1,9 @@
 package apply
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -199,6 +201,156 @@ func TestExecuteCancellationRecordsCancelledAndStopsInstall(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(directory, "versions", "node", "v24.14.0")); !os.IsNotExist(statErr) {
 		t.Fatalf("cancelled action produced target: %v", statErr)
+	}
+}
+
+func TestReviewRecoveryReportsCurrentAndRemovedTargetDrift(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I15 NVM execution is macOS-only and fixture requires bash")
+	}
+	service, directory, clock := fixtureService(t)
+	prepared, err := service.Prepare(t.Context(), Options{ToolID: "runtime.node", Version: "24.14.0", Online: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*clock = applyTestTime.Add(time.Minute)
+	result, err := service.Execute(t.Context(), prepared, execution.ConfirmationReceipt{
+		Scope: "plan", ConfirmedPlanID: prepared.Plan.ID, ConfirmedAt: applyTestTime.Add(30 * time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordPath := filepath.Join(service.HistoryRoot, result.Record.ID+".json")
+	before, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scans := 0
+	scan := service.Scan
+	service.Scan = func(ctx context.Context) (inventory.Inventory, error) {
+		scans++
+		return scan(ctx)
+	}
+	service.Assess = nil
+	service.Runner = nil
+
+	review, err := service.ReviewRecovery(t.Context(), result.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 || len(review.Candidates) != 1 ||
+		review.Candidates[0].ActionID != "install-node-version" ||
+		review.Candidates[0].CurrentState != execution.RecoveryCheckpointCurrent {
+		t.Fatalf("install recovery review = %#v, scans = %d", review, scans)
+	}
+	after, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("install recovery review changed source history")
+	}
+	encoded, err := json.Marshal(review)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte(directory)) || bytes.Contains(encoded, []byte(`"facts"`)) {
+		t.Fatalf("install recovery review leaked checkpoint facts: %s", encoded)
+	}
+
+	if err := os.RemoveAll(filepath.Join(directory, "versions", "node", "v24.14.0")); err != nil {
+		t.Fatal(err)
+	}
+	scans = 0
+	drifted, err := service.ReviewRecovery(t.Context(), result.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 || len(drifted.Candidates) != 1 ||
+		drifted.Candidates[0].CurrentState != execution.RecoveryCheckpointDrifted {
+		t.Fatalf("removed-target review = %#v, scans = %d", drifted, scans)
+	}
+}
+
+func TestReviewRecoveryKeepsFailedInstallUncertainWithoutScan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I15 NVM execution is macOS-only and fixture requires bash")
+	}
+	service, directory, clock := fixtureService(t)
+	prepared, err := service.Prepare(t.Context(), Options{ToolID: "runtime.node", Version: "24.14.0", Online: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "fail-download"), []byte("1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	*clock = applyTestTime.Add(time.Minute)
+	result, err := service.Execute(t.Context(), prepared, execution.ConfirmationReceipt{
+		Scope: "plan", ConfirmedPlanID: prepared.Plan.ID, ConfirmedAt: applyTestTime.Add(30 * time.Second),
+	})
+	if err == nil || result.Record.State != execution.StateFailed {
+		t.Fatalf("failed install source = %#v, %v", result, err)
+	}
+	scans := 0
+	service.Scan = func(context.Context) (inventory.Inventory, error) {
+		scans++
+		return inventory.Inventory{}, errors.New("scan must not be called")
+	}
+	service.Assess = nil
+	service.Runner = nil
+
+	review, err := service.ReviewRecovery(t.Context(), result.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 0 || len(review.Candidates) != 1 ||
+		review.Candidates[0].CurrentState != execution.RecoveryCheckpointUncertain {
+		t.Fatalf("uncertain install review = %#v, scans = %d", review, scans)
+	}
+	if _, statErr := os.Stat(filepath.Join(directory, "versions", "node", "v24.14.0")); !os.IsNotExist(statErr) {
+		t.Fatalf("recovery review created target: %v", statErr)
+	}
+}
+
+func TestReviewRecoveryCompletedSkippedAndInvalidIDNeedNoScan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I15 NVM execution is macOS-only and fixture requires bash")
+	}
+	service, _, clock := fixtureService(t)
+	prepared, err := service.Prepare(t.Context(), Options{ToolID: "runtime.node", Version: "24.14.0", Online: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := execution.ConfirmationReceipt{
+		Scope: "plan", ConfirmedPlanID: prepared.Plan.ID, ConfirmedAt: applyTestTime.Add(30 * time.Second),
+	}
+	*clock = applyTestTime.Add(time.Minute)
+	if _, err := service.Execute(t.Context(), prepared, receipt); err != nil {
+		t.Fatal(err)
+	}
+	*clock = applyTestTime.Add(2 * time.Minute)
+	receipt.ConfirmedAt = applyTestTime.Add(90 * time.Second)
+	skipped, err := service.Execute(t.Context(), prepared, receipt)
+	if err != nil || !skipped.Record.Steps[0].Skipped {
+		t.Fatalf("skipped install source = %#v, %v", skipped, err)
+	}
+	scans := 0
+	service.Scan = func(context.Context) (inventory.Inventory, error) {
+		scans++
+		return inventory.Inventory{}, errors.New("scan must not be called")
+	}
+	service.Runner = nil
+	service.Assess = nil
+
+	review, err := service.ReviewRecovery(t.Context(), skipped.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 0 || review.Candidates == nil || len(review.Candidates) != 0 {
+		t.Fatalf("skipped install review = %#v, scans = %d", review, scans)
+	}
+	if _, err := service.ReviewRecovery(t.Context(), "../invalid"); err == nil || scans != 0 {
+		t.Fatalf("invalid operation review error = %v, scans = %d", err, scans)
 	}
 }
 

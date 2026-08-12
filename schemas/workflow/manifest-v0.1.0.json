@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:envmason:schema:workflow-manifest:0.1.0",
+  "title": "EnvMason Staged Workflow Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "created_at",
+    "executable",
+    "confirmable",
+    "summary",
+    "target_node_version",
+    "node_tools",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "executable": {
+      "const": false
+    },
+    "confirmable": {
+      "const": false
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "target_node_version": {
+      "$ref": "#/$defs/version"
+    },
+    "node_tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "npm": {
+          "$ref": "#/$defs/version"
+        },
+        "corepack": {
+          "$ref": "#/$defs/version"
+        },
+        "pnpm": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/install_stage"
+        },
+        {
+          "$ref": "#/$defs/default_stage"
+        },
+        {
+          "$ref": "#/$defs/tools_stage"
+        }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "install_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order",
+        "risk",
+        "plan_schema_version",
+        "depends_on"
+      ],
+      "properties": {
+        "id": {
+          "const": "install_node"
+        },
+        "order": {
+          "const": 1
+        },
+        "risk": {
+          "const": "R2"
+        },
+        "plan_schema_version": {
+          "const": "0.2.0"
+        },
+        "depends_on": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "default_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order",
+        "risk",
+        "plan_schema_version",
+        "depends_on"
+      ],
+      "properties": {
+        "id": {
+          "const": "set_default"
+        },
+        "order": {
+          "const": 2
+        },
+        "risk": {
+          "const": "R3"
+        },
+        "plan_schema_version": {
+          "const": "0.3.0"
+        },
+        "depends_on": {
+          "const": [
+            "install_node"
+          ]
+        }
+      }
+    },
+    "tools_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order",
+        "risk",
+        "plan_schema_version",
+        "depends_on"
+      ],
+      "properties": {
+        "id": {
+          "const": "update_node_tools"
+        },
+        "order": {
+          "const": 3
+        },
+        "risk": {
+          "const": "R2"
+        },
+        "plan_schema_version": {
+          "const": "0.2.0"
+        },
+        "depends_on": {
+          "const": [
+            "set_default"
+          ]
+        }
+      }
+    }
+  }
+}
