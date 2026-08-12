@@ -1,0 +1,10 @@
+schema_version: 0.1.0
+name: frontend-node
+description: Base and Frontend Node capabilities using the latest supported LTS line.
+modules:
+  - id: frontend_node
+    version_policy:
+      strategy: lts
+    options:
+      browser_testing: false
+  - id: base

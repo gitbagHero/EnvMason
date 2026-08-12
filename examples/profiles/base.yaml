@@ -1,0 +1,5 @@
+schema_version: 0.1.0
+name: base
+description: Base developer capabilities with explicit standard defaults.
+modules:
+  - id: base
