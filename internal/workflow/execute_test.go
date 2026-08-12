@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -569,6 +571,13 @@ func newWorkflowExecutionHarness(
 	operationID string,
 ) workflowExecutionHarness {
 	t.Helper()
+	testExecutable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve test executable: %v", err)
+	}
+	if !filepath.IsAbs(testExecutable) {
+		t.Fatalf("test executable is not absolute: %q", testExecutable)
+	}
 	definitions := make([]execution.Definition, 0, len(childPlan.Actions))
 	for _, action := range childPlan.Actions {
 		action := action
@@ -580,7 +589,7 @@ func newWorkflowExecutionHarness(
 			MinimumRisk: action.Risk,
 			Build: func(plan.Action) (execution.CommandSpec, error) {
 				return execution.CommandSpec{
-					Executable: "/usr/bin/true",
+					Executable: testExecutable,
 					Timeout:    time.Minute,
 				}, nil
 			},

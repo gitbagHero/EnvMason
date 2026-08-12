@@ -242,6 +242,9 @@ func TestReviewRestoreReportsCurrentAndDriftWithoutWrites(t *testing.T) {
 }
 
 func TestReviewRestoreKeepsUncertainSourceReadOnlyWithoutScan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("I16 NVM execution is macOS-only and fixture requires bash")
+	}
 	service, directory, clock := defaultFixtureService(t)
 	prepared, err := service.PrepareSet(t.Context(), SetOptions{ToolID: "runtime.node", Version: "24.14.0"})
 	if err != nil {
