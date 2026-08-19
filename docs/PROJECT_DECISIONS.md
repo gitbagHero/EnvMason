@@ -617,6 +617,17 @@
 - 隐私与边界：输出只含 I21-B 的 `TransactionBaseline` 与 `ActionPreview`，不含文件路径、环境键值、catalog URI、bottle URL、命令、参数、确认或凭据。I21-C 不新增公开 Schema/CLI，不注册或运行 `brew install`，不完成 I21；固定写适配器和执行后 Lock/diff 继续后移。
 - 验收：双 formula、共享/已满足依赖、catalog/Artifact 乱序、target variation、formula revision、输入不可变、Plan/Lock/Inventory/Homebrew/配置/catalog/bottle 漂移、恶意/超大配置、缺失/多余/零大小 artifact、依赖缺失/循环/过大、输出无敏感信息及 I21-B 端到端接受均覆盖；全量、race、vet、build、离线和跨平台构建必须通过。
 
+### D-060：I21-D 固定 Homebrew 写适配器与重新确认边界
+
+- 状态：Accepted（依据 I21-C 合并完成及维护者进入阶段四的明确指令；不包含提交、推送、发布或真实机器写入授权）
+- 用户价值：已审查的 Git/CMake Homebrew 事务可以进入现有确定性执行器；任何候选 Plan、Review、brew 身份/字节、HOME/TMPDIR、配置、catalog、依赖闭包或安装状态漂移都会在写入前停止或被执行后精确验证捕获，失败不会误报完成。
+- 双重绑定与确认：I21-A 输出继续作为候选 Plan；`BindBaseTransactionReview` 为每项动作加入 Review ID 并派生不同的最终 Plan ID。执行适配器同时持有候选 Plan、Review 和最终 Plan，重新派生后逐字段比较。用户确认固定绑定最终 Plan ID 与 Review ID；Operation Record 复用 `0.4.0`，保存最终 Plan，因而保留 Review 前置条件与确认来源。
+- 固定动作：只注册 Review 恰好覆盖的 `homebrew.formula.git|cmake / install / homebrew` R2 Action，命令固定为绝对 active brew 路径加 `install --formula --force-bottle <git|cmake>`，不接受调用方参数、任意 formula、Shell、提权或 bootstrap。环境仅含经 Review 摘要绑定的 HOME/TMPDIR、brew/system PATH 及七个固定 Homebrew 安全变量，不继承 proxy、凭据或用户任意变量。
+- 重新采集、幂等与验证：确认后、历史和写进程前，使用新鲜显式快照重新运行 I21-C，忽略观察时间变化但要求全部执行事实一致。每项写动作再组合固定 `brew list --formula --versions` 与 `brew list --formula --full-name` 两个紧凑探针，拒绝旧版、多个 keg、重复/非 core tap、输出截断和已满足依赖漂移；根及完整 Review 闭包都精确满足时跳过写进程。进程成功后要求根与全部依赖恰有一个精确版本，否则记录验证失败。
+- 失败与恢复：复用 Operation Record 的 pending/running/verifying/completed/failed 状态和 before/after/diff；preflight 或探针失败不会启动写命令，进程失败和验证失败不会标记 completed，后续 Action 保持 pending。Action 恢复仍为 manual；固定检查点可将已记录变更复核为 current/drifted，不生成或执行卸载，因为卸载仍是独立 R3 Plan。
+- 非范围：不新增公开 Schema/CLI/Skill/MCP，不自动读取文件或环境，不自行下载 catalog/artifact，不更新/安装 Homebrew，不换源、不安装 cask、不开放任意版本或 formula，不生成执行后 Lock/diff，不进行真实机器安装验收，也不完成 I21。
+- 验收：最终 Plan 内容派生和输入不可变；确认/平台/快照/配置漂移在历史及写进程前停止；固定 spec 与隔离环境；根/依赖 absent/exact/conflict、多版本、重复/恶意或截断探针输出；幂等跳过、安装成功、preflight/进程/验证失败、Operation 隐私和恢复 current/drifted 均覆盖；全量、race、vet、build、module、离线及 Linux/Windows 跨平台构建通过。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -1393,3 +1404,18 @@
 - 远程检查：首次分支 CI #31579880066 的 Ubuntu/macOS × Go 1.25/1.26 四项通过，Windows × Go 1.25/1.26 两项发现纯核心错误使用宿主 `filepath.IsAbs`，使 Windows 将目标 macOS 路径误判为相对路径。修复改用固定 POSIX/macOS 路径语义并增加跨平台回归测试；修复后的分支 CI #31580456682 在 Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部通过。
 - N/A：本增量不提供公开 CLI/Schema，不自行发现/读取路径，不调用 Homebrew/Shell/网络，不执行/注册 `brew install`，不写 Operation/Plan/Lock，不 bootstrap、不卸载、不生成执行后 Lock/diff，也不完成 I21。
 - 结论：I21-C 本地与远端客观验收全部完成，阶段三完成并停在 PR/合并授权前。合并后才能冻结并进入 I21-D 固定 Homebrew 写适配器、重新采集/确认、失败记录和恢复边界；不得仅因事务事实已齐全就开放执行。
+
+## I21-D 验收记录
+
+- 增量：I21-D 固定 Homebrew 写适配器、重新采集与失败/恢复边界
+- 开始日期：2026-08-12；中断后恢复与完成日期：2026-08-17
+- 客观检查状态：Passed（待维护者确认；不包含提交或推送授权）
+- Plan 与确认检查：新增 `BindBaseTransactionReview`，保持 I21-A 候选 Plan 不变，为全部 Git/CMake Action 增加同一 Review ID 后重算最终 Plan ID。内部执行入口复用完整 I21-B 约束验证候选 Plan、Lock、Review 的内容与时间绑定，并核对派生 Plan 和 macOS 平台；确认必须同时绑定最终 Plan ID 与 Review ID，伪造、重复绑定、过期或错误确认均在历史及写进程前停止。
+- 重新采集与配置检查：确认后使用当前显式 Inventory、brew 路径/字节、完整配置、catalog、bottle tag 和 artifact 重新执行 I21-C；除观察时间外全部事务事实必须与 Review 一致。HOME/TMPDIR 现要求绝对 POSIX 路径并进入配置摘要，适配器自身再次核对 executable/configuration digest，避免绕过编排层换用未审查环境。
+- 固定执行检查：新增独立 `internal/adapter/homebrewinstall`，只生成 Review 恰好覆盖的 Git/CMake R2 Definition。写命令固定为 active 绝对 brew 路径及 `install --formula --force-bottle`；HOME、TMPDIR、最小 PATH 和七个 Homebrew 安全变量稳定排序，proxy 不继承，15 分钟超时并终止进程树。选项和嵌套 Plan/Review/configuration 均深复制。
+- 预检、幂等与验证检查：恢复任务后的只读实机核对发现全量 `brew info --json=v2 --installed` 在当前开发机输出约 409 KB，会稳定超过执行器 64 KiB 上限；据此改为固定 `brew list --formula --versions` 与 `brew list --formula --full-name` 双探针，当前两个输出分别约 1.2 KB 与 0.6 KB。解析器拒绝失败/截断、非法或重复行、版本/full-name 不一致、非 core tap、无效版本、旧版和多版本并存。已满足依赖必须保持精确；根及整个依赖闭包精确满足时才幂等跳过；执行成功后根和全部依赖必须恰有一个 Review 精确版本。
+- 历史与恢复检查：端到端测试覆盖成功、确认/平台/可执行文件/HOME/TMPDIR/catalog/artifact 漂移、旧版 preflight、竞态幂等跳过和写进程非零退出；Operation Record 保存最终 Plan/Review 绑定、固定调用、before/after/diff 和精确状态，且不泄漏 HOME/TMPDIR。已改变的成功记录通过固定检查点区分 current/drifted；可能已启动但无可证变更的失败保守标记 uncertain/manual，不执行卸载。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过。
+- 远程检查：N/A；本增量尚未获得提交或推送授权。
+- N/A：本增量不新增公开 Schema/CLI/Skill/MCP，不自行发现文件/环境/网络，不执行真实机器安装，不更新/bootstrap Homebrew，不接受任意 formula/版本，不换源、不提权、不卸载，也不生成最终 Lock/diff。
+- 结论：阶段四 I21-D 已完成本地客观验收，停在维护者确认与提交授权前。I21 仍需后续最小增量完成执行后 Inventory/最终 Lock/diff 以及可恢复 macOS 环境验收，不能因内部适配器存在就宣称整体完成。

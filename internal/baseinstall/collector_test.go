@@ -160,6 +160,62 @@ func TestCollectTransactionFactsAppliesFixedConfigurationPrecedence(t *testing.T
 	}
 }
 
+func TestValidateExecutionSnapshotsBindsExecutableHomeAndTemporaryPaths(t *testing.T) {
+	input := validCollectionInput(t)
+	facts, err := CollectTransactionFacts(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := PrepareTransactionReview(TransactionReviewInput{
+		PreparedAt: input.ObservedAt, Plan: input.Plan, Lock: input.Lock,
+		Baseline: facts.Baseline, Actions: facts.Actions,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateExecutionSnapshots(review, input.ExecutableData, input.Configuration); err != nil {
+		t.Fatalf("ValidateExecutionSnapshots() error = %v", err)
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*TransactionCollectionInput)
+	}{
+		{"executable", func(value *TransactionCollectionInput) { value.ExecutableData = []byte("changed") }},
+		{"HOME", func(value *TransactionCollectionInput) { value.Configuration.Environment["HOME"] = "/Users/changed" }},
+		{"TMPDIR", func(value *TransactionCollectionInput) { value.Configuration.Environment["TMPDIR"] = "/tmp/changed" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			changed := input
+			changed.ExecutableData = append([]byte{}, input.ExecutableData...)
+			changed.Configuration.Environment = map[string]string{}
+			for key, value := range input.Configuration.Environment {
+				changed.Configuration.Environment[key] = value
+			}
+			test.mutate(&changed)
+			if err := ValidateExecutionSnapshots(review, changed.ExecutableData, changed.Configuration); err == nil {
+				t.Fatal("changed execution snapshot was accepted")
+			}
+		})
+	}
+}
+
+func TestCollectTransactionFactsRequiresAbsoluteHomeAndTemporaryPaths(t *testing.T) {
+	for _, test := range []struct{ name, key, value string }{
+		{"relative HOME", "HOME", "relative/private"},
+		{"relative TMPDIR", "TMPDIR", "relative/private"},
+		{"unclean HOME", "HOME", "/Users/test/../changed"},
+		{"PATH separator TMPDIR", "TMPDIR", "/tmp/private:changed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := validCollectionInput(t)
+			input.Configuration.Environment[test.key] = test.value
+			if _, err := CollectTransactionFacts(input); err == nil || !strings.Contains(err.Error(), "execution path") {
+				t.Fatalf("invalid %s error = %v", test.key, err)
+			}
+		})
+	}
+}
+
 func TestCollectTransactionFactsRejectsDriftIncompleteClosureAndArtifacts(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -495,6 +551,8 @@ func validCollectionInput(t *testing.T) TransactionCollectionInput {
 		ExecutableData: []byte("#!/bin/bash\n# fixed Homebrew fixture\n"),
 		Configuration: ConfigurationSnapshot{
 			Environment: map[string]string{
+				"HOME":                                   "/Users/envmason",
+				"TMPDIR":                                 "/private/tmp/envmason",
 				"HOMEBREW_NO_ANALYTICS":                  "1",
 				"HOMEBREW_NO_ASK":                        "1",
 				"HOMEBREW_NO_AUTO_UPDATE":                "1",

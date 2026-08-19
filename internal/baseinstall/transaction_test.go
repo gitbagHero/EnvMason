@@ -184,6 +184,28 @@ func TestValidateTransactionReviewRejectsTampering(t *testing.T) {
 	}
 }
 
+func TestValidateTransactionReviewBindingRejectsStructurallyValidPrePlanReview(t *testing.T) {
+	input := validTransactionInput(t)
+	review, err := PrepareTransactionReview(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateTransactionReviewBinding(review, input.Plan, input.Lock); err != nil {
+		t.Fatalf("valid binding error = %v", err)
+	}
+	beforePlan := cloneTransactionReview(review)
+	beforePlan.PreparedAt = input.Plan.CreatedAt.Add(-time.Second)
+	beforePlan.Baseline.ObservedAt = beforePlan.PreparedAt
+	beforePlan.ID, err = transactionReviewID(beforePlan)
+	validationErr := ValidateTransactionReview(beforePlan)
+	if err != nil || validationErr != nil {
+		t.Fatalf("build structurally valid pre-Plan Review: ID=%v validation=%v", err, validationErr)
+	}
+	if err := ValidateTransactionReviewBinding(beforePlan, input.Plan, input.Lock); err == nil {
+		t.Fatal("structurally valid pre-Plan Review was accepted as bound")
+	}
+}
+
 func validTransactionInput(t *testing.T) TransactionReviewInput {
 	return transactionInputWithStates(t, lockfile.StateInstallRequired, lockfile.StateInstallRequired)
 }
