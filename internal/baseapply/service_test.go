@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -24,6 +25,7 @@ import (
 var applyTestTime = time.Date(2026, 8, 12, 8, 0, 0, 0, time.UTC)
 
 func TestServiceCompletesFixedReviewedInstallAndRevalidatesRecovery(t *testing.T) {
+	requireMacOSExecutorFixture(t)
 	fixture := newApplyFixture(t)
 	world := &applyWorld{}
 	store := &applyStore{}
@@ -112,6 +114,7 @@ func TestServiceRejectsUnconfirmedUnsupportedOrDriftedExecutionBeforeWrite(t *te
 }
 
 func TestServicePersistsPreflightAndProcessFailuresWithoutFalseCompletion(t *testing.T) {
+	requireMacOSExecutorFixture(t)
 	t.Run("conflicting installed version", func(t *testing.T) {
 		fixture := newApplyFixture(t)
 		world := &applyWorld{probeMode: "conflict"}
@@ -163,6 +166,7 @@ func TestServicePersistsPreflightAndProcessFailuresWithoutFalseCompletion(t *tes
 }
 
 func TestServicePreservesCompletedAndFailedStatesAcrossTwoFormulae(t *testing.T) {
+	requireMacOSExecutorFixture(t)
 	for _, test := range []struct {
 		name           string
 		failFormula    string
@@ -196,6 +200,7 @@ func TestServicePreservesCompletedAndFailedStatesAcrossTwoFormulae(t *testing.T)
 }
 
 func TestServiceSkipsWriteWhenReviewedStateBecomesExactDuringPreflight(t *testing.T) {
+	requireMacOSExecutorFixture(t)
 	fixture := newApplyFixture(t)
 	world := &applyWorld{installOnProbe: 3}
 	store := &applyStore{}
@@ -596,5 +601,12 @@ func assertExecutionFailure(t *testing.T, err error, code execution.Code) {
 	var failure *execution.ExecutionError
 	if !errors.As(err, &failure) || failure.Code != code {
 		t.Fatalf("error = %v, want %s", err, code)
+	}
+}
+
+func requireMacOSExecutorFixture(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("I21-D execution fixture uses reviewed absolute macOS paths")
 	}
 }
