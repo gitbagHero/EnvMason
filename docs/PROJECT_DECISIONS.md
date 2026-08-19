@@ -628,6 +628,18 @@
 - 非范围：不新增公开 Schema/CLI/Skill/MCP，不自动读取文件或环境，不自行下载 catalog/artifact，不更新/安装 Homebrew，不换源、不安装 cask、不开放任意版本或 formula，不生成执行后 Lock/diff，不进行真实机器安装验收，也不完成 I21。
 - 验收：最终 Plan 内容派生和输入不可变；确认/平台/快照/配置漂移在历史及写进程前停止；固定 spec 与隔离环境；根/依赖 absent/exact/conflict、多版本、重复/恶意或截断探针输出；幂等跳过、安装成功、preflight/进程/验证失败、Operation 隐私和恢复 current/drifted 均覆盖；全量、race、vet、build、module、离线及 Linux/Windows 跨平台构建通过。
 
+### D-061：I21-E 执行后最终 Lock 与差异收敛边界
+
+- 状态：Accepted（依据 I21-D 合并完成及维护者开始下一阶段任务的明确指令；不包含提交、推送、PR、合并、发布或真实机器写入授权）
+- 用户价值：只有一次完整成功且身份绑定的 Base Homebrew Operation 与执行后精确 Inventory 同时成立时，调用方才能得到新的最终 Lock 和最小结构化差异；失败、部分成功或当前状态漂移不会产生误导性的成功 Lock。
+- 入口与证据：新增内部纯 `Finalize` 入口，只接受显式 `finalized_at`、I21-D `Prepared`、Operation Record `0.4.0` 和同一时刻的当前 Inventory。入口重新派生 Prepared，要求 Record 为 Completed、保存的 confirmed Plan 与最终 Plan 逐字段一致、结束时间不晚于收敛时间，并核对每个 Action 的 before/after Snapshot 与 Review 公式闭包；不读取历史文件、环境、Homebrew、网络或主机状态。
+- 执行后状态：Inventory 必须完整通过当前 Schema，时间恰好等于 `finalized_at`，目标 OS/版本/架构与 Lock 相同，并且唯一 active Homebrew installation 的 ID、版本、manager、路径和架构仍与确认 Plan 一致。Review 中全部根与传递依赖必须在目标或 unknown 架构下各有且仅有一个 Homebrew installation，并匹配精确版本；缺失、旧版、多版本或身份漂移全部停止。
+- Lock 派生：新增 `lockfile.DeriveState`，只能更新原 Lock 中已有 item 的 state、observed 和 reason；Profile reference、target、sources、item/module/capability 和 implementation 全部继承，重新计算 summary、规范顺序和内容 ID。I21-E 只把本次 Review 对应的 `base.git|base.cmake` 从 `install_required` 收敛为 `satisfied`，预先 satisfied 或非本次项保持逐字段不变。
+- 差异与隐私：结果只含 Operation/Plan/Review ID、完整最终 Lock，以及按 item ID 排序的 capability/tool/manager/version 与 before/after state。它不包含原始 Inventory、Installation ID/path、命令、参数、环境、Snapshot facts、stdout/stderr 或错误详情；输出中的 Lock 继续遵守既有无路径隐私契约。
+- 失败边界：非 Completed、旧 Schema、缺失状态快照、Snapshot 闭包伪造、最终时间倒退、Inventory/目标/Homebrew/公式闭包漂移均返回空结果，不为部分完成动作生成部分 Lock。自动扫描、持久化及恢复/卸载决策仍由后续入口负责。
+- 验收：单动作与 Git+CMake 双动作、确定性 ID、输入不可变、已满足项不变、差异排序、二次 Plan 无安装动作、输出隐私，以及 Prepared/Record/Snapshot/时间/目标/Homebrew/root/dependency 缺失、旧版、重复和漂移失败均覆盖；全量、race、vet、build、module、离线及 Linux/Windows 跨平台构建通过。
+- 非范围：不新增或修改公开 Schema/CLI/Skill/MCP，不自动扫描或持久化 Inventory/Lock，不调用 Homebrew 或执行真实安装，不处理失败后的恢复/卸载，不 bootstrap/更新/换源 Homebrew，也不完成 I21 的可恢复 macOS 环境验收。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -1409,7 +1421,8 @@
 
 - 增量：I21-D 固定 Homebrew 写适配器、重新采集与失败/恢复边界
 - 开始日期：2026-08-12；中断后恢复与本地完成日期：2026-08-17；远端完成日期：2026-08-19
-- 客观检查状态：Passed（待维护者验收；不包含 PR、合并或发布授权）
+- 客观检查状态：Passed
+- 维护者验收：Accepted（维护者于 2026-08-19 明确授权创建 PR 并合并；不包含发布授权）
 - Plan 与确认检查：新增 `BindBaseTransactionReview`，保持 I21-A 候选 Plan 不变，为全部 Git/CMake Action 增加同一 Review ID 后重算最终 Plan ID。内部执行入口复用完整 I21-B 约束验证候选 Plan、Lock、Review 的内容与时间绑定，并核对派生 Plan 和 macOS 平台；确认必须同时绑定最终 Plan ID 与 Review ID，伪造、重复绑定、过期或错误确认均在历史及写进程前停止。
 - 重新采集与配置检查：确认后使用当前显式 Inventory、brew 路径/字节、完整配置、catalog、bottle tag 和 artifact 重新执行 I21-C；除观察时间外全部事务事实必须与 Review 一致。HOME/TMPDIR 现要求绝对 POSIX 路径并进入配置摘要，适配器自身再次核对 executable/configuration digest，避免绕过编排层换用未审查环境。
 - 固定执行检查：新增独立 `internal/adapter/homebrewinstall`，只生成 Review 恰好覆盖的 Git/CMake R2 Definition。写命令固定为 active 绝对 brew 路径及 `install --formula --force-bottle`；HOME、TMPDIR、最小 PATH 和七个 Homebrew 安全变量稳定排序，proxy 不继承，15 分钟超时并终止进程树。选项和嵌套 Plan/Review/configuration 均深复制。
@@ -1418,4 +1431,20 @@
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过。
 - 远程检查：首次分支 CI #32228847098 的 Ubuntu/macOS × Go 1.25/1.26 四项通过，Windows × Go 1.25/1.26 两项发现 macOS-only 执行 fixture 使用 POSIX 绝对路径，Windows 宿主执行器会按本机路径语义正确拒绝该测试 spec。修复仅在 Windows 跳过四项依赖 macOS 执行路径的集成 fixture，生产校验及其余纯逻辑测试保持不变；修复后的 CI #32229477623 六项全部通过。
 - N/A：本增量不新增公开 Schema/CLI/Skill/MCP，不自行发现文件/环境/网络，不执行真实机器安装，不更新/bootstrap Homebrew，不接受任意 formula/版本，不换源、不提权、不卸载，也不生成最终 Lock/diff。
-- 结论：阶段四 I21-D 已完成本地与远端客观验收，停在维护者验收及 PR/合并授权前。I21 仍需后续最小增量完成执行后 Inventory/最终 Lock/diff 以及可恢复 macOS 环境验收，不能因内部适配器存在就宣称整体完成。
+- 结论：阶段四 I21-D 已完成本地与远端客观验收并通过 PR #3 合并；I21 仍需后续最小增量完成执行后 Inventory/最终 Lock/diff 以及可恢复 macOS 环境验收，不能因内部适配器存在就宣称整体完成。
+
+## I21-E 验收记录
+
+- 增量：I21-E 执行后最终 Lock 与结构化差异收敛
+- 开始、本地完成与检查日期：2026-08-19
+- 客观检查状态：Passed
+- 维护者验收：Accepted（维护者于 2026-08-19 明确允许远端验收并合并；不包含发布或真实机器写入授权）
+- 用户价值与入口检查：新增内部纯 `Finalize`，只有完整有效的 I21-D Prepared、Completed Operation Record `0.4.0` 和同一 `finalized_at` 的显式执行后 Inventory 才能生成 Outcome；入口不发现文件、环境、历史或网络，也不调用 Homebrew/Runner/Store。
+- 来源与时间检查：Prepared 必须可从 Candidate Plan、原 Lock 和 Review 逐字段重新派生；Record 必须保存完全相同的最终 confirmed Plan、恰好覆盖全部 Review Action 且结束时间不晚于收敛时间。旧 Schema、Failed、结束时间倒退、缺失 Before/After 或伪造初始/最终公式闭包均返回空结果。
+- 执行后闭包检查：Inventory 必须通过当前 Schema，生成时间与收敛时间相同，系统目标与原 Lock 一致；唯一 active Homebrew installation 的 ID、版本、manager、路径和架构必须保持 Plan 绑定。Review 的全部 root/传递依赖在目标或 unknown 架构下必须各有且仅有一个精确 Homebrew 版本，缺失、旧版、重复、错误架构或身份漂移均停止；多项失败错误按公式名稳定返回。
+- Lock 与差异检查：新增通用 `lockfile.DeriveState`，只改变既有 item 的 resolution evidence 并重新规范 summary/ID；Profile、target、sources、item identity 和 implementation 全部继承。I21-E 只把 Review 对应的 Git/CMake 从 install_required 更新为 satisfied，原本 satisfied 的 CMake 逐字段不变；Git+CMake 差异按 item ID 排序。使用最终 Lock 再准备 Base Plan 会明确得到无安装动作，证明终态收敛的幂等语义。
+- 隐私与不可变检查：Finalize 对 Prepared/Record/Inventory 输入逐字节不变；Outcome 只含 Operation/Plan/Review ID、最终 Lock 和 capability/tool/manager/version/state 差异。序列化结果不含 HOME、TMPDIR、Homebrew/Cellar 路径、命令、参数、环境、Snapshot facts、stdout/stderr 或原始 Inventory。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过。`internal/lockfile`、`internal/baseinstall` 和 `internal/baseapply` 语句覆盖率分别为 88.6%、87.2% 和 88.5%。
+- 远程检查：[分支 CI #32232554955](https://github.com/gitbagHero/EnvMason/actions/runs/32232554955) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部通过；每项均完成格式、全量测试、vet 和 CLI 构建。
+- N/A：本增量不新增公开 Schema/CLI/Skill/MCP，不自动扫描/持久化 Inventory 或 Lock，不执行真实 Homebrew 安装，不生成失败后的部分 Lock，不恢复/卸载、不 bootstrap/更新/换源 Homebrew，也不完成可恢复 macOS 环境验收。
+- 结论：I21-E 本地与远端客观验收完成，并已获得 PR/合并授权。I21 尚需在干净且可恢复的 macOS VM 完成真实配装与二次运行验收，当前不能进入 I22。
