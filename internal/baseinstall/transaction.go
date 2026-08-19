@@ -175,6 +175,27 @@ func ValidateTransactionReview(value TransactionReview) error {
 	return nil
 }
 
+// ValidateTransactionReviewBinding applies the complete I21-B candidate
+// Plan and Lock contract to an already sealed Review. It validates binding
+// and timing only; fresh external facts must still be recollected separately.
+func ValidateTransactionReviewBinding(
+	value TransactionReview,
+	candidate plan.Plan,
+	lock lockfile.Lock,
+) error {
+	if err := ValidateTransactionReview(value); err != nil {
+		return errors.New("validate Homebrew transaction review binding: Review is invalid")
+	}
+	want, err := PrepareTransactionReview(TransactionReviewInput{
+		PreparedAt: value.PreparedAt, Plan: candidate, Lock: lock,
+		Baseline: value.Baseline, Actions: value.Actions,
+	})
+	if err != nil || !reflect.DeepEqual(want, value) {
+		return errors.New("validate Homebrew transaction review binding: Review does not match the candidate Plan and Lock")
+	}
+	return nil
+}
+
 func validateTransactionInput(input TransactionReviewInput) error {
 	prefix := "prepare Homebrew transaction review: "
 	if input.PreparedAt.IsZero() {
@@ -416,7 +437,9 @@ func transactionReviewID(value TransactionReview) (string, error) {
 }
 
 func cloneTransactionBaseline(value TransactionBaseline) TransactionBaseline {
-	value.UnsafeConfigurationKeys = append([]string{}, value.UnsafeConfigurationKeys...)
+	if value.UnsafeConfigurationKeys != nil {
+		value.UnsafeConfigurationKeys = append([]string(nil), value.UnsafeConfigurationKeys...)
+	}
 	return value
 }
 
@@ -424,7 +447,9 @@ func cloneActionPreviews(values []ActionPreview) []ActionPreview {
 	result := make([]ActionPreview, len(values))
 	for index, value := range values {
 		result[index] = value
-		result[index].Dependencies = append([]FormulaPreview{}, value.Dependencies...)
+		if value.Dependencies != nil {
+			result[index].Dependencies = append([]FormulaPreview(nil), value.Dependencies...)
+		}
 	}
 	return result
 }

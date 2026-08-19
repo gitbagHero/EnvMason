@@ -88,6 +88,25 @@ type TransactionFacts struct {
 	Actions  []ActionPreview
 }
 
+// ValidateExecutionSnapshots checks that explicit executable and
+// configuration snapshots still match a sealed transaction review. It is
+// pure and performs no file, process or environment discovery.
+func ValidateExecutionSnapshots(
+	review TransactionReview,
+	executableData []byte,
+	configuration ConfigurationSnapshot,
+) error {
+	if ValidateTransactionReview(review) != nil || len(executableData) == 0 ||
+		len(executableData) > maxExecutableBytes || digestBytes(executableData) != review.Baseline.ExecutableDigest {
+		return errors.New("validate Homebrew execution snapshots: executable snapshot does not match the review")
+	}
+	digest, unsafe, err := assessConfiguration(configuration)
+	if err != nil || len(unsafe) != 0 || digest != review.Baseline.ConfigurationDigest {
+		return errors.New("validate Homebrew execution snapshots: configuration snapshot does not match the review")
+	}
+	return nil
+}
+
 type catalogDocument []catalogFormula
 
 type catalogFormula struct {
@@ -131,6 +150,8 @@ type configurationEntry struct {
 
 type configurationDigestInput struct {
 	Environment []configurationEntry `json:"environment"`
+	Home        string               `json:"home"`
+	Temporary   string               `json:"temporary"`
 	System      string               `json:"system"`
 	Prefix      string               `json:"prefix"`
 	User        string               `json:"user"`
@@ -315,6 +336,13 @@ func assessConfiguration(value ConfigurationSnapshot) (string, []string, error) 
 		{name: "user", data: value.User},
 	}
 	effective := make(map[string]string)
+	for _, key := range []string{"HOME", "TMPDIR"} {
+		entry := value.Environment[key]
+		if entry == "" || len(entry) > maxConfigurationValue ||
+			strings.ContainsAny(entry, ":\x00\r\n") || !path.IsAbs(entry) || path.Clean(entry) != entry {
+			return "", nil, fmt.Errorf("collect Homebrew transaction: %s execution path is invalid", key)
+		}
+	}
 	for key, entry := range value.Environment {
 		if relevantHomebrewKey(key) {
 			if !safeConfigurationKey(key) || len(key)+len(entry) > maxConfigurationValue ||
@@ -360,6 +388,8 @@ func assessConfiguration(value ConfigurationSnapshot) (string, []string, error) 
 	})
 	payload := configurationDigestInput{
 		Environment: environment,
+		Home:        value.Environment["HOME"],
+		Temporary:   value.Environment["TMPDIR"],
 		System:      digestBytes(value.System),
 		Prefix:      digestBytes(value.Prefix),
 		User:        digestBytes(value.User),

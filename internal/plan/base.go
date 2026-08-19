@@ -18,9 +18,9 @@ type BaseInstallInput struct {
 	CreatedAt time.Time
 }
 
-// BuildBaseInstall builds an executable but deliberately unregistered Plan
-// for the first macOS Base formulae. I21-A provides review only: no Homebrew
-// action definition exists yet, so the executor cannot run the result.
+// BuildBaseInstall builds the candidate Plan for the first macOS Base
+// formulae. It cannot be executed by I21-D until a current transaction review
+// is bound into a distinct final Plan ID.
 func BuildBaseInstall(input BaseInstallInput) (Plan, error) {
 	if input.CreatedAt.IsZero() {
 		return Plan{}, errors.New("build Base Plan: created_at is required")

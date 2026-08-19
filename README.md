@@ -4,7 +4,7 @@ EnvMason 是面向 macOS、Windows 和 Linux 的开发者工作站生命周期�
 
 ## 当前状态
 
-**I00：产品契约冻结** 至 **I20：macOS Profile 解析与 Lock** 已按顺序通过验收，I21-A/I21-B 已完成 Base Plan 和 Homebrew 安装事务的内部只读准备门禁，I21-C 已完成只读事务事实采集门禁。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 的内部能力已覆盖多动作 DAG 失败隔离、检查点继续、恢复复核和三阶段独立确认编排；按 D-053 方案 A，新编排保持内部 API。I19/I20 新增严格 Profile `0.1.0`、单目标 Lock `0.1.0` 和纯 macOS 解析器，可规范化 Base/Frontend Node 并基于显式目录快照区分已满足、需安装、冲突和无法解析。I21 目前仍未开放 Homebrew 写适配器、Profile/Lock CLI 或实际 Base 配装。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
+**I00：产品契约冻结** 至 **I20：macOS Profile 解析与 Lock** 已按顺序通过验收；I21-A 至 I21-C 已完成 Base Plan、Homebrew 安装事务 Review 和只读事实采集门禁，I21-D 已完成内部固定 Homebrew 写适配器的本地与远端客观验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 的内部能力已覆盖多动作 DAG 失败隔离、检查点继续、恢复复核和三阶段独立确认编排；按 D-053 方案 A，新编排保持内部 API。I19/I20 新增严格 Profile `0.1.0`、单目标 Lock `0.1.0` 和纯 macOS 解析器，可规范化 Base/Frontend Node 并基于显式目录快照区分已满足、需安装、冲突和无法解析。I21-D 仍未接入 CLI，也未完成真实可恢复 macOS 环境验收、执行后 Lock 和差异报告，因此 I21 尚未完成。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
 
 核心原则：
 
@@ -219,3 +219,5 @@ I21-A 新增内部 Base Plan 准备器，只为已校验 Lock 中确需安装的
 I21-B 新增内部只读 Homebrew Transaction Review `0.1.0`。它把仍在有效期内的 I21-A Plan、原 Lock、Homebrew/配置/catalog 摘要，以及 Git/CMake 根 formula 的精确传递依赖闭包封存为不可执行、不可确认的内容派生记录。Action 漏项、来源或配置漂移、依赖版本冲突、未知下载量和总量溢出都会停止；共享依赖按唯一 formula 去重汇总。Review 不含 HOME、brew 路径、源 URI、环境值、命令、参数、确认或凭据，也不会注册或运行 `brew install`。
 
 I21-C 增加上述 Review 的内部纯只读事实采集核心。调用方必须显式提供同一观察时刻的当前 Inventory、精确 brew 可执行文件字节、当前环境及 system/prefix/user 三层 `brew.env` 内容、与 Lock digest 完全一致的官方 formula catalog JSON，以及按目标 macOS bottle tag 绑定 SHA-256 的下载大小事实。核心按 Homebrew 固定优先级解析配置但不执行 Shell，要求关闭自动更新、隐式升级/cleanup、dependents 检查、analytics、ask 和环境提示；未批准的 Homebrew/proxy 配置全部停止。catalog 只接受 `homebrew/core`，解析目标 variation、formula revision、required/recommended 传递依赖并对照当前已安装版本，缺失/多余/零大小或 digest 不匹配的 bottle 都停止。输出只含 I21-B 所需摘要和公式事实；本阶段仍不读任意路径、不联网、不调用 Homebrew、不开放 CLI、不注册 `brew install`。
+
+I21-D 增加内部固定 Homebrew 写适配器和执行编排。I21-A 候选 Plan 必须先与 I21-C Review 派生出新的最终 Plan ID，用户确认同时绑定该 Plan 与 Review；执行前重新采集完整事务事实，并再次核对 brew 可执行文件、HOME/TMPDIR 和受控 Homebrew 配置摘要。当前只注册 Git/CMake 的 `brew install --formula --force-bottle` R2 动作，环境不继承 proxy，关闭自动更新、隐式升级和 cleanup；预检、幂等判断、执行后精确闭包验证、Operation Record 和恢复检查点复核均复用现有确定性执行核心。它仍是内部 API，不 bootstrap/升级 Homebrew、不接受任意 formula、不卸载、不提权、不读取任意路径，也不生成最终 Lock/diff。
