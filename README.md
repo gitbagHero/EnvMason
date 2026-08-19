@@ -4,7 +4,7 @@ EnvMason 是面向 macOS、Windows 和 Linux 的开发者工作站生命周期�
 
 ## 当前状态
 
-**I00：产品契约冻结** 至 **I20：macOS Profile 解析与 Lock** 已按顺序通过验收；I21-A 至 I21-C 已完成 Base Plan、Homebrew 安装事务 Review 和只读事实采集门禁，I21-D 已完成内部固定 Homebrew 写适配器的本地客观验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 的内部能力已覆盖多动作 DAG 失败隔离、检查点继续、恢复复核和三阶段独立确认编排；按 D-053 方案 A，新编排保持内部 API。I19/I20 新增严格 Profile `0.1.0`、单目标 Lock `0.1.0` 和纯 macOS 解析器，可规范化 Base/Frontend Node 并基于显式目录快照区分已满足、需安装、冲突和无法解析。I21-D 仍未接入 CLI，也未完成真实可恢复 macOS 环境验收、执行后 Lock 和差异报告，因此 I21 尚未完成。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
+**I00：产品契约冻结** 至 **I20：macOS Profile 解析与 Lock** 已按顺序通过验收；I21-A 至 I21-C 已完成 Base Plan、Homebrew 安装事务 Review 和只读事实采集门禁，I21-D 已完成内部固定 Homebrew 写适配器的本地与远端客观验收。系统可以将本机、项目和新鲜官方版本事实组合成 Node/Java 的结构化建议，把一项合格的 Node 目标转换为可审查 Plan，并在 macOS 上通过现有 NVM 安装精确 Node 版本、独立切换 default alias、显式恢复原 alias，以及在目标 NVM Node 下选择性更新 npm、Corepack 与 pnpm。I18 的内部能力已覆盖多动作 DAG 失败隔离、检查点继续、恢复复核和三阶段独立确认编排；按 D-053 方案 A，新编排保持内部 API。I19/I20 新增严格 Profile `0.1.0`、单目标 Lock `0.1.0` 和纯 macOS 解析器，可规范化 Base/Frontend Node 并基于显式目录快照区分已满足、需安装、冲突和无法解析。I21-D 仍未接入 CLI，也未完成真实可恢复 macOS 环境验收、执行后 Lock 和差异报告，因此 I21 尚未完成。当前仍不能安装 NVM、迁移任意全局包、处理 Yarn 复杂策略、卸载旧版本或执行任意命令。
 
 核心原则：
 

@@ -1408,14 +1408,14 @@
 ## I21-D 验收记录
 
 - 增量：I21-D 固定 Homebrew 写适配器、重新采集与失败/恢复边界
-- 开始日期：2026-08-12；中断后恢复与完成日期：2026-08-17
-- 客观检查状态：Passed（待维护者确认；不包含提交或推送授权）
+- 开始日期：2026-08-12；中断后恢复与本地完成日期：2026-08-17；远端完成日期：2026-08-19
+- 客观检查状态：Passed（待维护者验收；不包含 PR、合并或发布授权）
 - Plan 与确认检查：新增 `BindBaseTransactionReview`，保持 I21-A 候选 Plan 不变，为全部 Git/CMake Action 增加同一 Review ID 后重算最终 Plan ID。内部执行入口复用完整 I21-B 约束验证候选 Plan、Lock、Review 的内容与时间绑定，并核对派生 Plan 和 macOS 平台；确认必须同时绑定最终 Plan ID 与 Review ID，伪造、重复绑定、过期或错误确认均在历史及写进程前停止。
 - 重新采集与配置检查：确认后使用当前显式 Inventory、brew 路径/字节、完整配置、catalog、bottle tag 和 artifact 重新执行 I21-C；除观察时间外全部事务事实必须与 Review 一致。HOME/TMPDIR 现要求绝对 POSIX 路径并进入配置摘要，适配器自身再次核对 executable/configuration digest，避免绕过编排层换用未审查环境。
 - 固定执行检查：新增独立 `internal/adapter/homebrewinstall`，只生成 Review 恰好覆盖的 Git/CMake R2 Definition。写命令固定为 active 绝对 brew 路径及 `install --formula --force-bottle`；HOME、TMPDIR、最小 PATH 和七个 Homebrew 安全变量稳定排序，proxy 不继承，15 分钟超时并终止进程树。选项和嵌套 Plan/Review/configuration 均深复制。
 - 预检、幂等与验证检查：恢复任务后的只读实机核对发现全量 `brew info --json=v2 --installed` 在当前开发机输出约 409 KB，会稳定超过执行器 64 KiB 上限；据此改为固定 `brew list --formula --versions` 与 `brew list --formula --full-name` 双探针，当前两个输出分别约 1.2 KB 与 0.6 KB。解析器拒绝失败/截断、非法或重复行、版本/full-name 不一致、非 core tap、无效版本、旧版和多版本并存。已满足依赖必须保持精确；根及整个依赖闭包精确满足时才幂等跳过；执行成功后根和全部依赖必须恰有一个 Review 精确版本。
 - 历史与恢复检查：端到端测试覆盖成功、确认/平台/可执行文件/HOME/TMPDIR/catalog/artifact 漂移、旧版 preflight、竞态幂等跳过和写进程非零退出；Operation Record 保存最终 Plan/Review 绑定、固定调用、before/after/diff 和精确状态，且不泄漏 HOME/TMPDIR。已改变的成功记录通过固定检查点区分 current/drifted；可能已启动但无可证变更的失败保守标记 uncertain/manual，不执行卸载。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过。
-- 远程检查：N/A；本增量尚未获得提交或推送授权。
+- 远程检查：首次分支 CI #32228847098 的 Ubuntu/macOS × Go 1.25/1.26 四项通过，Windows × Go 1.25/1.26 两项发现 macOS-only 执行 fixture 使用 POSIX 绝对路径，Windows 宿主执行器会按本机路径语义正确拒绝该测试 spec。修复仅在 Windows 跳过四项依赖 macOS 执行路径的集成 fixture，生产校验及其余纯逻辑测试保持不变；修复后的 CI #32229477623 六项全部通过。
 - N/A：本增量不新增公开 Schema/CLI/Skill/MCP，不自行发现文件/环境/网络，不执行真实机器安装，不更新/bootstrap Homebrew，不接受任意 formula/版本，不换源、不提权、不卸载，也不生成最终 Lock/diff。
-- 结论：阶段四 I21-D 已完成本地客观验收，停在维护者确认与提交授权前。I21 仍需后续最小增量完成执行后 Inventory/最终 Lock/diff 以及可恢复 macOS 环境验收，不能因内部适配器存在就宣称整体完成。
+- 结论：阶段四 I21-D 已完成本地与远端客观验收，停在维护者验收及 PR/合并授权前。I21 仍需后续最小增量完成执行后 Inventory/最终 Lock/diff 以及可恢复 macOS 环境验收，不能因内部适配器存在就宣称整体完成。
