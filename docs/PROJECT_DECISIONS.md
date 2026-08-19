@@ -1437,13 +1437,14 @@
 
 - 增量：I21-E 执行后最终 Lock 与结构化差异收敛
 - 开始、本地完成与检查日期：2026-08-19
-- 客观检查状态：Passed（待维护者验收；不包含提交、推送、PR、合并、发布或真实机器写入授权）
+- 客观检查状态：Passed
+- 维护者验收：Accepted（维护者于 2026-08-19 明确允许远端验收并合并；不包含发布或真实机器写入授权）
 - 用户价值与入口检查：新增内部纯 `Finalize`，只有完整有效的 I21-D Prepared、Completed Operation Record `0.4.0` 和同一 `finalized_at` 的显式执行后 Inventory 才能生成 Outcome；入口不发现文件、环境、历史或网络，也不调用 Homebrew/Runner/Store。
 - 来源与时间检查：Prepared 必须可从 Candidate Plan、原 Lock 和 Review 逐字段重新派生；Record 必须保存完全相同的最终 confirmed Plan、恰好覆盖全部 Review Action 且结束时间不晚于收敛时间。旧 Schema、Failed、结束时间倒退、缺失 Before/After 或伪造初始/最终公式闭包均返回空结果。
 - 执行后闭包检查：Inventory 必须通过当前 Schema，生成时间与收敛时间相同，系统目标与原 Lock 一致；唯一 active Homebrew installation 的 ID、版本、manager、路径和架构必须保持 Plan 绑定。Review 的全部 root/传递依赖在目标或 unknown 架构下必须各有且仅有一个精确 Homebrew 版本，缺失、旧版、重复、错误架构或身份漂移均停止；多项失败错误按公式名稳定返回。
 - Lock 与差异检查：新增通用 `lockfile.DeriveState`，只改变既有 item 的 resolution evidence 并重新规范 summary/ID；Profile、target、sources、item identity 和 implementation 全部继承。I21-E 只把 Review 对应的 Git/CMake 从 install_required 更新为 satisfied，原本 satisfied 的 CMake 逐字段不变；Git+CMake 差异按 item ID 排序。使用最终 Lock 再准备 Base Plan 会明确得到无安装动作，证明终态收敛的幂等语义。
 - 隐私与不可变检查：Finalize 对 Prepared/Record/Inventory 输入逐字节不变；Outcome 只含 Operation/Plan/Review ID、最终 Lock 和 capability/tool/manager/version/state 差异。序列化结果不含 HOME、TMPDIR、Homebrew/Cellar 路径、命令、参数、环境、Snapshot facts、stdout/stderr 或原始 Inventory。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过。`internal/lockfile`、`internal/baseinstall` 和 `internal/baseapply` 语句覆盖率分别为 88.6%、87.2% 和 88.5%。
-- 远程检查：N/A；当前修改尚未获得提交或推送授权。
+- 远程检查：[分支 CI #32232554955](https://github.com/gitbagHero/EnvMason/actions/runs/32232554955) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部通过；每项均完成格式、全量测试、vet 和 CLI 构建。
 - N/A：本增量不新增公开 Schema/CLI/Skill/MCP，不自动扫描/持久化 Inventory 或 Lock，不执行真实 Homebrew 安装，不生成失败后的部分 Lock，不恢复/卸载、不 bootstrap/更新/换源 Homebrew，也不完成可恢复 macOS 环境验收。
-- 结论：I21-E 本地客观验收完成并停在未提交边界，等待维护者验收与 Git 授权。I21 尚需在干净且可恢复的 macOS 测试用户或 VM 完成真实配装与二次运行验收，当前不能进入 I22。
+- 结论：I21-E 本地与远端客观验收完成，并已获得 PR/合并授权。I21 尚需在干净且可恢复的 macOS VM 完成真实配装与二次运行验收，当前不能进入 I22。
