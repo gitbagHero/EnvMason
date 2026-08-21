@@ -640,6 +640,20 @@
 - 验收：单动作与 Git+CMake 双动作、确定性 ID、输入不可变、已满足项不变、差异排序、二次 Plan 无安装动作、输出隐私，以及 Prepared/Record/Snapshot/时间/目标/Homebrew/root/dependency 缺失、旧版、重复和漂移失败均覆盖；全量、race、vet、build、module、离线及 Linux/Windows 跨平台构建通过。
 - 非范围：不新增或修改公开 Schema/CLI/Skill/MCP，不自动扫描或持久化 Inventory/Lock，不调用 Homebrew 或执行真实安装，不处理失败后的恢复/卸载，不 bootstrap/更新/换源 Homebrew，也不完成 I21 的可恢复 macOS 环境验收。
 
+### D-062：I21-F1 默认禁用的可恢复 macOS 双阶段验收入口
+
+- 状态：Accepted（依据 I21-E 合并完成及维护者开始下一步任务的明确指令；不包含提交、推送、发布或真实 Homebrew 写入授权）
+- 用户价值：维护者可以先在一次完全只读的准备阶段审查真实 macOS VM 上生成的 Base Plan 与 Homebrew Review，再用精确 Plan/Review 身份启动独立应用阶段；测试入口不会因普通单元测试、默认 CI 或发行构建而意外修改机器。
+- 形态：入口仅存在于 `internal/baseapply` 的测试构建，要求 `darwin && envmason_live_i21` build tag、固定测试名、显式 `prepare|apply` 模式、仓库外绝对 bundle 路径和一次性 disposable-VM 声明。默认 `go test ./...`、`go build ./...`、CLI 和发布产物不包含或运行实机入口。
+- 两阶段边界：`prepare` 只执行固定只读系统/Homebrew 查询、读取固定配置文件和 brew 可执行文件、获取官方 `formula.json` 及 GHCR bottle HEAD 元数据；它生成内容派生、权限受限的私有 bundle，并输出不含环境值或原始 Inventory 的 Plan/Review 摘要及精确确认 token。`apply` 重新严格解码和校验 bundle，要求 token 同时绑定最终 Plan ID 与 Review ID，重新采集全部新鲜事实后才调用现有 I21-D 服务。
+- 环境安全门：只允许 macOS arm64/amd64、系统级 active Homebrew 和仓库外 bundle；Homebrew 缺失、Git/CMake 任一目标架构 Homebrew formula 已安装、多个安装版本、Homebrew/config/catalog/bottle 漂移、Plan 过期或确认错误均在 Operation 历史和写进程前停止。当前开发机已安装 Git/CMake，因此只能验证拒绝路径，不能成为 I21-F2 写入环境。
+- 网络与来源：catalog URL 固定为无查询/凭据的 `https://formulae.brew.sh/api/formula.json`，大小有界并以原始 SHA-256 绑定 Lock。Bottle URL 只接受官方 `ghcr.io/v2/homebrew/core/.../blobs/sha256:<digest>`；只通过受限匿名 token challenge 和 HEAD 读取正 `Content-Length`/digest，不下载 bottle、不写 Homebrew cache、不跟随任意 realm/host。
+- 私有证据：bundle 保存规范化 Profile、完整 Prepared、原始 catalog 和白名单 artifact 元数据，但不保存确认 token、GHCR token、进程输出或环境继承；只能在仓库外创建真实普通文件，父目录/文件权限分别为 `0700`/`0600`，符号链接拒绝。Operation 历史、最终 Lock 和 Outcome 同样写在该私有 VM 目录，最终可分享证据仅使用既有脱敏模型。
+- I21-F2 边界：F1 只交付并模拟验证入口，不在当前机器执行安装。真实 `brew install` 仍是独立 I21-F2：必须在 Homebrew 已存在而 Git/CMake formula 均缺失的可恢复 VM 快照中，再次获得绑定输出 Plan/Review 的 R2 明确确认；成功后验证最终 Lock、二次零动作，并恢复或销毁 VM。
+- 风险：build tag/环境变量误触发、确认复用、私有 bundle 被篡改或落入仓库、prepare 暗中下载/写 cache、外部 URL/token 泄漏、非空环境被误作首次配装，或把 F1 误报为真实验收；通过多重门、内容 ID、严格 codec、固定网络白名单、HEAD-only 客户端、零写 runner 断言和明确 F1/F2 状态控制。
+- 验收：默认不可达与 tagged 显式入口、mode/path/VM 声明/确认矩阵、bundle 内容 ID/严格解码/权限/符号链接、非空 Git/CMake 拒绝、固定 catalog/GHCR URL 与 HEAD/token challenge、准备零安装/历史、apply 漂移零写、输出隐私和输入不变均覆盖；全量、race、vet、build、module、离线、Linux/Windows 构建及 macOS tagged 安全拒绝测试通过。
+- 非范围：不新增公开 CLI/Schema/Skill/MCP，不自动创建/启动/恢复 VM，不安装/bootstrap/update/cleanup/uninstall/换源 Homebrew，不执行 cask/任意 formula，不把环境变量当作用户确认，不在默认 CI 运行 live 模式，也不完成 I21 或进入 I22。
+
 ## 已规划、尚未决定的事项
 
 | 事项 | 最迟决策增量 |
@@ -1448,3 +1462,20 @@
 - 远程检查：[分支 CI #32232554955](https://github.com/gitbagHero/EnvMason/actions/runs/32232554955) 的 Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部通过；每项均完成格式、全量测试、vet 和 CLI 构建。
 - N/A：本增量不新增公开 Schema/CLI/Skill/MCP，不自动扫描/持久化 Inventory 或 Lock，不执行真实 Homebrew 安装，不生成失败后的部分 Lock，不恢复/卸载、不 bootstrap/更新/换源 Homebrew，也不完成可恢复 macOS 环境验收。
 - 结论：I21-E 本地与远端客观验收完成，并已获得 PR/合并授权。I21 尚需在干净且可恢复的 macOS VM 完成真实配装与二次运行验收，当前不能进入 I22。
+
+## I21-F1 验收记录
+
+- 增量：默认禁用的可恢复 macOS 双阶段 live acceptance harness
+- 开始、本地完成与检查日期：2026-08-19
+- 客观检查状态：Passed
+- 维护者验收：Accepted（维护者于 2026-08-19 明确授权提交和推送；不包含创建 PR、合并、发布、真实 Homebrew 写入或 I21-F2 授权）
+- 默认隔离与入口检查：实机入口只存在于 `darwin && envmason_live_i21` 测试构建；普通 `go test ./...`、CLI 与发行构建均不可达。入口固定 `prepare|apply` 两种模式，并要求精确 disposable-VM 声明、仓库外绝对 `.json` bundle 和仍有效的当前时间；apply 另要求同时绑定最终 Plan ID 与 Review ID 的精确 token。默认排除和显式 tagged 包含已通过命令断言。
+- 完整模拟检查：纯 fixture 从规范化 minimal Base Profile（显式启用 CMake、关闭 terminal）依次生成官方目录投影、Lock、Git+CMake 双动作候选 Plan、Git/gettext/CMake 闭包 artifact、Transaction Review、Review 绑定后的不同最终 Plan 和内容派生 bundle。Profile/Prepared/catalog/bottle tag/artifact 顺序、digest、大小或 bundle ID 任一篡改均被严格 codec 拒绝；Review 输出不含 HOME、brew/TMP 路径、环境、catalog URL、Inventory 或进程输出。
+- 环境与私有证据检查：只接受原生 macOS arm64 `/opt/homebrew` 或 amd64 `/usr/local` 的固定系统 Homebrew 位置；目标架构 Git/CMake formula 任一已存在即停止。任何额外 `HOMEBREW_*`、proxy、`SUDO_ASKPASS`、`XDG_CONFIG_HOME` 或错误安全开关在 Homebrew/网络前停止且不回显值。bundle 父目录/文件严格要求真实目录或普通文件、`0700`/`0600`、仓库外解析路径、大小上限和无符号链接；写入使用不覆盖创建，公共目录权限保持不变而不是被入口改写。
+- 网络与漂移检查：catalog 只允许固定官方 URL、GET、无 redirect 和 64 MiB 上限，原始 digest 绑定 Lock/bundle；可达闭包的 bottle URL 只允许精确 `ghcr.io/v2/homebrew/core/.../blobs/sha256:<digest>`。测试逐请求断言匿名 HEAD → 固定 realm/service/scope token GET → 携带内存 token 的授权 HEAD，只接受正 `Content-Length` 和匹配 `Docker-Content-Digest`；恶意 realm/host/scope、HTTP、公式或 digest 漂移在执行前拒绝。2026-08-19 只读抽查当前官方 Git/CMake/gettext/openssl@3 数据与 GHCR challenge 形状一致。
+- prepare/apply 与收敛检查：prepare 在任何写能力前完成两次本机事实核对，只输出脱敏 Review、精确 token 和私有 bundle。apply 先重新校验 bundle/确认/有效期，再重新 GET catalog、HEAD bottle，并在网络后重新采集 Inventory、brew 字节和三层固定配置；全部事实匹配后才调用既有 I21-D `Service`。成功路径继续调用 I21-E `Finalize`，要求用同一 Profile/目录/执行后 Inventory 重解 Lock 与最终 Lock 逐字段一致，并确认第二次 Base Plan 为零动作；最终 Lock/Outcome 与 Operation 只进入 bundle 的私有目录。详细人工流程见 `docs/I21_LIVE_ACCEPTANCE.md`。
+- 当前机安全拒绝：当前 macOS 15.7.4 arm64、Homebrew 6.0.12 开发机已有目标 Git/CMake。带完整 prepare mode、disposable 声明、隔离环境和新的仓库外不存在路径运行固定 test，按预期以“Git and CMake Homebrew formulae must be absent”非零退出；断言 bundle 及父目录均未创建。tagged 当前机安全测试同样通过，且该拒绝发生在 catalog/GHCR 与 Operation/写进程前。
+- 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、tagged 普通/race/vet、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过；无 TODO/FIXME/HACK/panic。
+- 远程检查：[分支 CI #32238004840](https://github.com/gitbagHero/EnvMason/actions/runs/32238004840) 已通过；运行精确绑定提交 `5dd8b3bb7bb2d0106ea68fba9cc4eb29457bc5df`，Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部完成格式、全量测试、vet 和 CLI 构建。
+- N/A：F1 不创建、启动、恢复或销毁 VM，不执行真实 `brew install`，不 bootstrap/update/cleanup/uninstall/换源 Homebrew，不新增公开 CLI/Schema/Skill/MCP，不把环境变量本身视为用户授权，也不完成 I21 或进入 I22。
+- 结论：I21-F1 的默认禁用入口、模拟、运行手册、当前机零写拒绝及远端六矩阵验收均已完成。分支已推送，下一 Git 门禁是提交本收口记录并由维护者另行授权 PR/合并。之后的最小增量是 I21-F2：只能在 Git/CMake 均缺失的可恢复 VM 快照中先运行 prepare，维护者再对输出的精确 Plan/Review 给出新的 R2 明确确认后运行 apply，并以最终 Lock、二次零动作和 VM 恢复/销毁完成 I21。
