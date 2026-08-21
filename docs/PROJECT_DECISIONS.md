@@ -1476,6 +1476,6 @@
 - prepare/apply 与收敛检查：prepare 在任何写能力前完成两次本机事实核对，只输出脱敏 Review、精确 token 和私有 bundle。apply 先重新校验 bundle/确认/有效期，再重新 GET catalog、HEAD bottle，并在网络后重新采集 Inventory、brew 字节和三层固定配置；全部事实匹配后才调用既有 I21-D `Service`。成功路径继续调用 I21-E `Finalize`，要求用同一 Profile/目录/执行后 Inventory 重解 Lock 与最终 Lock 逐字段一致，并确认第二次 Base Plan 为零动作；最终 Lock/Outcome 与 Operation 只进入 bundle 的私有目录。详细人工流程见 `docs/I21_LIVE_ACCEPTANCE.md`。
 - 当前机安全拒绝：当前 macOS 15.7.4 arm64、Homebrew 6.0.12 开发机已有目标 Git/CMake。带完整 prepare mode、disposable 声明、隔离环境和新的仓库外不存在路径运行固定 test，按预期以“Git and CMake Homebrew formulae must be absent”非零退出；断言 bundle 及父目录均未创建。tagged 当前机安全测试同样通过，且该拒绝发生在 catalog/GHCR 与 Operation/写进程前。
 - 自动检查：`go test -count=1 ./...`、`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...`、`go mod verify`、tagged 普通/race/vet、`GOSUMDB=off GOPROXY=off` 相关包测试、Linux/Windows amd64 构建及 `git diff --check` 全部通过；无 TODO/FIXME/HACK/panic。
-- 远程检查：Pending；本次授权包含分支推送，推送触发的远端 CI 结果待后续记录。
+- 远程检查：[分支 CI #32238004840](https://github.com/gitbagHero/EnvMason/actions/runs/32238004840) 已通过；运行精确绑定提交 `5dd8b3bb7bb2d0106ea68fba9cc4eb29457bc5df`，Ubuntu、macOS、Windows × Go 1.25/1.26 六项全部完成格式、全量测试、vet 和 CLI 构建。
 - N/A：F1 不创建、启动、恢复或销毁 VM，不执行真实 `brew install`，不 bootstrap/update/cleanup/uninstall/换源 Homebrew，不新增公开 CLI/Schema/Skill/MCP，不把环境变量本身视为用户授权，也不完成 I21 或进入 I22。
-- 结论：I21-F1 的默认禁用入口、模拟、运行手册和当前机零写拒绝已完成本地客观验收。下一最小增量是 I21-F2：只能在 Git/CMake 均缺失的可恢复 VM 快照中先运行 prepare，维护者再对输出的精确 Plan/Review 给出新的 R2 明确确认后运行 apply，并以最终 Lock、二次零动作和 VM 恢复/销毁完成 I21。
+- 结论：I21-F1 的默认禁用入口、模拟、运行手册、当前机零写拒绝及远端六矩阵验收均已完成。分支已推送，下一 Git 门禁是提交本收口记录并由维护者另行授权 PR/合并。之后的最小增量是 I21-F2：只能在 Git/CMake 均缺失的可恢复 VM 快照中先运行 prepare，维护者再对输出的精确 Plan/Review 给出新的 R2 明确确认后运行 apply，并以最终 Lock、二次零动作和 VM 恢复/销毁完成 I21。
